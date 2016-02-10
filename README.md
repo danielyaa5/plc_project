@@ -40,6 +40,9 @@ The following are implemented:
 - Short-circuit evaluation of `&&` or `||` are *not* implemented.
 - The program does not necessarily detects an error if there is a mismatching type
 
+### Style
+The coding style will follow [Scheme wiki's style guide](http://community.schemewiki.org/?scheme-style).
+
 ## Credit
 - Daniel Yakobian `djy18`
 - Justin Wang `jsw104`
