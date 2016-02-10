@@ -34,6 +34,13 @@
       ; (('!) (NOT X Y))
       )))
 
+; #! tests for boolean operators
+; (#t || #f)                ; returns #t
+; (#t && #f)                ; returns #f
+; (#f || #f)                ; returns #f
+; (!#t)                     ; returns #f
+; !#
+
 
 ;;; comparison operators ;;;
 ;;; X <comparisonOper> Y, where <comparisonOper> -> ==, !=, <, >, <=. >=
@@ -50,5 +57,9 @@
       ; do we need a default case here?
       )))
 
-
-;;; 
+; #! tests for comparison operators
+; (3 >= 3)                  ; returns #t
+; (10 == 11)                ; returns #f
+; ('foo == 'foo)            ; returns #t
+; (10 <= 5)                 ; returns #t
+; !#
