@@ -333,4 +333,3 @@
           ((eq? (car firstsymbol) 'BOOLEAN) (cdr firstsymbol))
           (else (error 'parser "Unknown statmement")))));)
 
-
