@@ -1,13 +1,17 @@
+
+
 ;;; return statement ;;;
 ;;; returns the given value or the evaluated value of the given calculation.
 ;;; @param 
-(define return
+(define returnStatement
   (lambda (value)
     (cond
       (((number? value) ; if input is a number, just return that
        value
        ))
-      ;((pair? (value) ; if input is a evaluation, run evaluation method?
+      ((pair? (value))
+       value
+       ); if input is a statement, evaluate that
       (else
        0
        )               ; not sure how to handle other cases
@@ -26,13 +30,17 @@
 ;;; X <boolOper> Y, where <boolOper> -> &&, ||, ! (but ! is a different case)
 ;;; X, Y: the expressions to be evaluated
 
-(define bool
+(define booleanOperations
   (lambda (X boolOper Y)
-    (case boolOper
-      ('&& (AND X Y))
-      ('|| (OR X Y))
+    (cond
+      ((eq? boolOper '&&)
+       (AND X Y))
+      ((eq? boolOper '||)
+       (OR X Y))
+      (else 'foo ; handle other case?
+       ))))
       ; (('!) (NOT X Y))
-      )))
+      
 
 ; #! tests for boolean operators
 ; (#t || #f)                ; returns #t
@@ -46,14 +54,14 @@
 ;;; X <comparisonOper> Y, where <comparisonOper> -> ==, !=, <, >, <=. >=
 ;;; X, Y: the expressions to be evaluated
 (define compare
-  (lambda (X compareOper Y)
-    (case compareOper
-      (('==) (eq? X Y))
-      (('>=) (>= X Y))
-      (('<=) (<= X Y))
-      (('!=) !(eq? X Y))
-      (('>) (> X Y))
-      (('<) (< X Y))
+  (lambda (X compareOper Y state)
+    (cond
+      ((eq? compareOper '==) (eq? X Y))
+      ((eq? compareOper '>=) (>= X Y))
+      ((eq? compareOper '<=) (<= X Y))
+      ((eq? compareOper '!=) !(eq? X Y))
+      ((eq? compareOper '>) (> X Y))
+      ((eq? compareOper '<) (< X Y))
       ; do we need a default case here?
       )))
 
@@ -63,3 +71,28 @@
 ; ('foo == 'foo)            ; returns #t
 ; (10 <= 5)                 ; returns #t
 ; !#
+
+(define true #t)
+(define false #f)
+
+(define getFirstVar caar)
+(define getFirstValue cadar)
+(define restOf
+    (lambda (state)
+        (cons (cdar state) (cdadr state))))
+
+;;; Mvalue ;;;
+;;; returns the M_value of the expression
+(define M_value
+  (lambda (expression)
+    (cond
+      ((number? expression) expression)
+      ((not (list? expression)) (lookupValue expression state)) ;lookupValue not implemented
+      ((eq? 'true) true)
+      ((eq? 'false) false)
+      ((eq? '+ (operator expression)) (+ (M_value (operand1 expression)) (M_value (operand2 expression))))
+      ((eq? '- (operator expression)) (- (M_value (operand1 expression)) (M_value (operand2 expression))))
+      ((eq? '* (operator expression)) (* (M_value (operand1 expression)) (M_value (operand2 expression))))
+      ((eq? '/ (operator expression)) (quotient (M_value (operand1 expression)) (M_value (operand2 expression))))
+      ((eq? '% (operator expression)) (remainder (M_value (operand1 expression)) (M_value (operand2 expression))))
+      (else (error 'unknown "unknown expression"))))))
