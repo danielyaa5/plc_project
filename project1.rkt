@@ -15,16 +15,17 @@
   (lambda (variable value state)
     (cond
       ((null? value) (cons (cons variable (cons '() '())) state))
-      (else (cons (cons variable (cons (M_value value state) '())) state)))))
+      (else (cons (cons variable (cons (M_value value state) '())) state)))
+    ))
 
 ;;; M_state-update ;;;
 ;;; updates a value in the M_state
 ;;; a non-existing value in the M_state (e.g. running x = 3 when there is only (y 5) in state) should throw an error as well.
 (define M_state-update
-  (lambda (var value state)
+  (lambda (variable value state)
     (cond
-      ((eq? (car (car state)) var) (M_state-add var value (cdr state)))
-      (else (cons (car state) (M_state-update var value (cdr state)))))))
+      ((eq? (car (car state)) variable) (M_state-add variable value (cdr state)))
+      (else (cons (car state) (M_state-update variable value (cdr state)))))))
 
 ;;; M_value ;;;
 ;;; calculates the M_value of the given expression and returns it
@@ -93,16 +94,19 @@
 ;;; assign statement ;;; e.g. (x 3)
 (define assignStatement
   (lambda (stmt state)
-    ((null? (M_lookup (car stmt) state)
-            (M_state-add (car stmt) (M_value (cadr stmt) state) state)
-            (M_state-update (car stmt) (M_value (cadr stmt) state) state)))))
+    ((null? (M_lookup (operator stmt) state))
+            (M_state-add (operator stmt) (M_value (cadr stmt) state) state)
+            (M_state-update (operator stmt) (M_value (cadr stmt) state) state)
+            )))
 
-;;; declare statement ;;; e.g. (x) or (x 3), or even (x (+ 3 5))
+;;; declare statement ;;; e.g. (x), (x 3), or even (x (+ 3 5))
 (define declareStatement
   (lambda (stmt state)
-    ((null? (cdr stmt)) (M_state-add stmt 'UNDEFINED state))
-    ((null? (M_lookup (car stmt) state)) (M_state-add (car stmt) (M_value (cdr stmt) state) state))
-     ))
+    (cond
+      ((null? (cdr stmt)) (M_state-add stmt 'UNDEFINED state))
+      ((null? (M_lookup (car stmt) state)) (M_state-add (car stmt) (M_value (cdr stmt) state) state))
+    
+     )))
             
 
 
@@ -159,14 +163,6 @@
 ; operator: returns the operator of the given expression;   usage: (operator ('= x 5)) => '=
 ; operand1: returns the left-hand operand of the given expression; (operand1 ('= x 5)) => x
 ; operand2: returns the righthand operand of the given expression; (operand2 ('= x 5)) => 5
-(define operator
-  (lambda (expr)
-    (car expr)))
-
-(define operand1
-  (lambda (expr)
-    (cadr expr)))
-
-(define operand2
-  (lambda (expr)
-    (caddr expr)))
+(define operator car)
+(define operand1 cadr)
+(define operand2 caddr)
