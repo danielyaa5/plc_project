@@ -5,6 +5,7 @@
     ((eq? 'return (car expr)) (returnStatement (restOf expr) state))
     ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
     ((eq? 'if (car expr)) (ifStatement (restOf expr) state))
+    ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
     ((eq? 'var (car expr)) (declareStatement (restOf expr) state))
     ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state))))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
 
@@ -47,6 +48,7 @@
                                           (M_value (operand2 expr) state)))
       ((eq? '% (operator expr)) (remainder (M_value (operand1 expr) state) 
                                            (M_value (operand2 expr) state)))
+      ((eq? '= (operator expr)) (M_state-add (operand1 expr) (operand2 expr) state))
       (else (error "not recognized"))
       )))
 
@@ -108,8 +110,23 @@
     
      )))
             
+;;; if statement ;;;
+;;; if <cond> <stmt> <elseStmt>
+(define ifStatement
+  (lambda (cond stmt elseStmt state)
+    (cond
+      ((eq? (M_cond cond state) #t)
+       (M_value stmt state)
+       (M_value elseStmt state)
+       ))))
 
-
+;;; while statement ;;;
+;;; while <cond> <stmt>
+(define whileStatement
+  (lambda (cond stmt state)
+    ((eq? (M_cond cond state) true) (M_value stmt))))
+  
+    
 ;;; boolean operators ;;;
 ;;; assuming that format would be (|| X Y); where X Y are operands and || is the operator.
 (define booleanCondition
@@ -122,7 +139,6 @@
        (or (booleanCondition (operand1 expr) state)
            (booleanCondition (operand2 expr) state)))
        )))
-
 
 ;;; comparison operators ;;;
 ;;; 
