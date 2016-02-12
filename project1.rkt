@@ -1,15 +1,41 @@
-;;; M_value
-;;; calculates the M_value of the given expression and returns it
+;;; runStatement ;;;
+;;; the upper-level logic. reads each line and runs it
+(define run
+  (lambda (expr state)
+    ((eq? 'return (car expr)) (returnStatement (restOf expr) state))
+    ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
+    ((eq? 'if (car expr)) (ifStatement (restOf expr) state))
+    ((eq? 'var (car expr)) (declareStatement (restOf expr) state))
+    ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state))))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
 
+
+;;; M_state-add ;;;
+;;; Adds a value into the M_state
+(define M_state-add
+  (lambda (variable value state)
+    (cond
+      ((null? value) (cons (cons variable (cons '() '())) state))
+      (else (cons (cons variable (cons (M_value value state) '())) state)))))
+
+;;; M_state-update ;;;
+;;; updates a value in the M_state
+;;; a non-existing value in the M_state (e.g. running x = 3 when there is only (y 5) in state) should throw an error as well.
+(define M_state-update
+  (lambda (var value state)
+    (cond
+      ((eq? (car (car state)) var) (M_state-add var value (cdr state)))
+      (else (cons (car state) (M_state-update var value (cdr state)))))))
+
+;;; M_value ;;;
+;;; calculates the M_value of the given expression and returns it
 (define M_value
   (lambda (expr state)
     (cond
       ((eq? 'true expr) true)
       ((eq? 'false expr) false)
-      ((null? expr) (error "ERR: variable not yet declared"))
       ((number? expr) expr)
       ((atom? expr) (M_value (M_lookup expr state) state))
-      ((and (= (length expr) 2) (eq? '- (operator expr))) (* -1 (M_value (operand1 expr) state)))
+      ((and (eq? (length expr) 2) (eq? '- (operator expr))) (* -1 (M_value (operand1 expr) state)))
       ((eq? '+ (operator expr)) (+ (M_value (operand1 expr) state) 
                                    (M_value (operand2 expr) state)))
       ((eq? '- (operator expr)) (- (M_value (operand1 expr) state)
@@ -19,7 +45,9 @@
       ((eq? '/ (operator expr)) (quotient (M_value (operand1 expr) state)
                                           (M_value (operand2 expr) state)))
       ((eq? '% (operator expr)) (remainder (M_value (operand1 expr) state) 
-                                           (M_value (operand2 expr) state))))))
+                                           (M_value (operand2 expr) state)))
+      (else (error "not recognized"))
+      )))
 
 ;;; M_lookup ;;;
 ;;; looks up the value of the given variable.
@@ -32,28 +60,9 @@
       (else (M_lookup var (cdr state)))
       )))
 
-
-(define getFirstVar caar)
-(define getFirstValue cadar)
-(define atom?
-  (lambda (x)
-    (not (or (pair? x) (null? x)))))
-                 
-;;; return statement ;;;
-;;; returns the given value or the evaluated value of the given calculation.
-;;; @param 
-(define returnStatement
-  (lambda (expr)
-    (cond
-      ((number? expr) ; if input is a number, just return that
-       expr); if input is a statement, evaluate that
-      ((list? expr) ; if input is an expression, then we have to evaluate that
-       ))))
-
 ;;; condition ;;;
 ;;; checks what kind of conditional operation the expression is and calls appropriate function
 ;;; e.g. comparison or boolean
-
 (define M_cond
   (lambda (expr state)
     (cond
@@ -65,11 +74,40 @@
        (booleanCondition expr state))
       (else (compareCondition expr state))
       )))
+
+;;; miscellaneous helper methods ;;;
+(define getFirstVar caar)
+(define getFirstValue cadar)
+(define atom?
+  (lambda (x)
+    (not (or (pair? x) (null? x)))))
+(define restOf cdr)
+                 
+;;; return statement ;;;
+;;; returns the given value or the evaluated value of the given calculation.
+;;; @param 
+(define returnStatement
+  (lambda (expr state)
+    (M_value expr state)))
+
+;;; assign statement ;;; e.g. (x 3)
+(define assignStatement
+  (lambda (stmt state)
+    ((null? (M_lookup (car stmt) state)
+            (M_state-add (car stmt) (M_value (cadr stmt) state) state)
+            (M_state-update (car stmt) (M_value (cadr stmt) state) state)))))
+
+;;; declare statement ;;; e.g. (x) or (x 3), or even (x (+ 3 5))
+(define declareStatement
+  (lambda (stmt state)
+    ((null? (cdr stmt)) (M_state-add stmt 'UNDEFINED state))
+    ((null? (M_lookup (car stmt) state)) (M_state-add (car stmt) (M_value (cdr stmt) state) state))
+     ))
             
+
 
 ;;; boolean operators ;;;
 ;;; assuming that format would be (|| X Y); where X Y are operands and || is the operator.
-
 (define booleanCondition
   (lambda (expr state)
     (cond
@@ -81,9 +119,9 @@
            (booleanCondition (operand2 expr) state)))
        )))
 
+
 ;;; comparison operators ;;;
-;;;
-  
+;;; 
 (define compareCondition
   (lambda (expr state)
     (cond
@@ -115,11 +153,9 @@
 ; (10 <= 5)                 ; returns #t
 ; !#
 
-
 ;;; operator and operands functions ;;;
 ;; @param expr the expression to find its operator/operands
 ;; @returns the operator/operand of given expression
-;
 ; operator: returns the operator of the given expression;   usage: (operator ('= x 5)) => '=
 ; operand1: returns the left-hand operand of the given expression; (operand1 ('= x 5)) => x
 ; operand2: returns the righthand operand of the given expression; (operand2 ('= x 5)) => 5
