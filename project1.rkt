@@ -1,11 +1,15 @@
+(load "simpleParser.scm")
+
+
 ;;; go ;;;
 ;;; the upper-level logic. reads the entire list of statements and calls run on each.
 ;;; when done, returns the state.
 (define go
   (lambda (stmts state)
-    (if (null? (cdr stmts))
+    (if (null? stmts)
         state
-        (run (car stmts) state)
+        (go (cdr stmts)
+             (run (car stmts) state))
      )))
 
 
@@ -13,12 +17,14 @@
 ;;; the upper-level logic. reads each line and runs it
 (define run
   (lambda (expr state)
-    ((eq? 'return (car expr)) (returnStatement (restOf expr) state))
-    ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
-    ((eq? 'if (car expr)) (ifStatement (restOf expr) state))
-    ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
-    ((eq? 'var (car expr)) (declareStatement (restOf expr) state))
-    ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state))))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
+    (cond
+      ((eq? 'return (car expr)) (returnStatement (restOf expr) state))
+      ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
+      ((eq? 'if (car expr)) (ifStatement (restOf expr) state))
+      ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
+      ((eq? 'var (car expr)) (declareStatement (restOf expr) state))
+      ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state)))
+      ))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
 
 ;;; M_state-add ;;;
 ;;; Adds a value into the M_state
@@ -26,7 +32,7 @@
   (lambda (variable value state)
     (cond
       ((null? value) (cons (cons variable (cons '() '())) state))
-      (else (cons (cons variable (cons (M_value value state) '())) state)))))
+      (else (cons (cons variable (M_value value state)) state)))))
 
 ;;; M_state-update ;;;
 ;;; updates a value in the M_state
@@ -44,9 +50,10 @@
     (cond
       ((eq? 'true expr) true)
       ((eq? 'false expr) false)
-      ((number? expr) expr)
+      ((number? (car expr)) expr)
       ((atom? expr) (M_value (M_lookup expr state) state))
       ((and (eq? (length expr) 2) (eq? '- (operator expr))) (* -1 (M_value (operand1 expr) state)))
+      ((eq? '= (operator expr)) (M_state-add (operand1 expr) (operand2 expr) state))
       ((eq? '+ (operator expr)) (+ (M_value (operand1 expr) state) 
                                    (M_value (operand2 expr) state)))
       ((eq? '- (operator expr)) (- (M_value (operand1 expr) state)
@@ -57,8 +64,8 @@
                                           (M_value (operand2 expr) state)))
       ((eq? '% (operator expr)) (remainder (M_value (operand1 expr) state) 
                                            (M_value (operand2 expr) state)))
-      ((eq? '= (operator expr)) (M_state-add (operand1 expr) (operand2 expr) state))
-      (else (error "not recognized"))
+      
+      ;(else (error "not recognized"))
       )))
 
 ;;; M_lookup ;;;
@@ -189,3 +196,8 @@
 (define operator car)
 (define operand1 cadr)
 (define operand2 caddr)
+
+
+
+
+(go (parser "test/test") `())
