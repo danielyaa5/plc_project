@@ -1,5 +1,44 @@
+;;; M_value
+;;; calculates the M_value of the given expression and returns it
+
+(define M_value
+  (lambda (expr state)
+    (cond
+      ((eq? 'true expr) true)
+      ((eq? 'false expr) false)
+      ((null? expr) (error "ERR: variable not yet declared"))
+      ((number? expr) expr)
+      ((atom? expr) (M_value (M_lookup expr state) state))
+      ((and (= (length expr) 2) (eq? '- (operator expr))) (* -1 (M_value (operand1 expr) state)))
+      ((eq? '+ (operator expr)) (+ (M_value (operand1 expr) state) 
+                                   (M_value (operand2 expr) state)))
+      ((eq? '- (operator expr)) (- (M_value (operand1 expr) state)
+                                   (M_value (operand2 expr) state)))
+      ((eq? '* (operator expr)) (* (M_value (operand1 expr) state) 
+                                   (M_value (operand2 expr) state)))
+      ((eq? '/ (operator expr)) (quotient (M_value (operand1 expr) state)
+                                          (M_value (operand2 expr) state)))
+      ((eq? '% (operator expr)) (remainder (M_value (operand1 expr) state) 
+                                           (M_value (operand2 expr) state))))))
+
+;;; M_lookup ;;;
+;;; looks up the value of the given variable.
+;;; If the variable does not exist in state, return an empty list.
+(define M_lookup
+  (lambda (var state)
+    (cond
+      ((null? state) '()) ; variable does not exist in state
+      ((eq? var (getFirstVar state)) (getFirstValue state))
+      (else (M_lookup var (cdr state)))
+      )))
 
 
+(define getFirstVar caar)
+(define getFirstValue cadar)
+(define atom?
+  (lambda (x)
+    (not (or (pair? x) (null? x)))))
+                 
 ;;; return statement ;;;
 ;;; returns the given value or the evaluated value of the given calculation.
 ;;; @param 
@@ -7,27 +46,26 @@
   (lambda (expr)
     (cond
       ((number? expr) ; if input is a number, just return that
-       expr
-       'null)
-      ((pair? expr)
-       expr
-       ); if input is a statement, evaluate that
-      ((expression? (expr))
-       0
-       )
-      (else
-       0
-       )               ; not sure how to handle other cases
-      )))
+       expr); if input is a statement, evaluate that
+      ((list? expr) ; if input is an expression, then we have to evaluate that
+       ))))
 
-;;; tests are disabled until functions are complete
-;#! tests for return
-;(return 150)              ; returns 150
-;(return 3 * 4)            ; returns 12 (evaluates 3 * 4)
-;(return 'hello)           ; returns the string "hello"
-;; assume x = 3, y = 5 assigned
-;(return x + y)            ; returns 8
-;!#
+;;; condition ;;;
+;;; checks what kind of conditional operation the expression is and calls appropriate function
+;;; e.g. comparison or boolean
+
+(define M_cond
+  (lambda (expr state)
+    (cond
+      ((number? expr) expr)
+      ((eq? 'true expr) true)
+      ((eq? 'false expr) false)
+      ((eq? (operator expr) '!) (not (M_value (operand1 expr) state)))
+      ((or (eq? (operator expr) '&&) (eq? (operator expr) '||))
+       (booleanCondition expr state))
+      (else (compareCondition expr state))
+      )))
+            
 
 ;;; boolean operators ;;;
 ;;; assuming that format would be (|| X Y); where X Y are operands and || is the operator.
@@ -41,35 +79,33 @@
       ((eq? (operator expr) '||)
        (or (booleanCondition (operand1 expr) state)
            (booleanCondition (operand2 expr) state)))
-      (else 'null); handle other case?
        )))
-      ; (('!) (NOT X Y))
 
 ;;; comparison operators ;;;
-;;; X <comparisonOper> Y, where <comparisonOper> -> ==, !=, <, >, <=. >=
-;;; X, Y: the expressions to be evaluated
-(define compareConditional
+;;;
+  
+(define compareCondition
   (lambda (expr state)
     (cond
       ((eq? (operator expr) '==)
-       (eq? (compareConditional (operand1 expr) state)
-            (compareConditional (operand2 expr) state)))
-      ((eq? (operator expr) '>=)
-       (>= (compareConditional (operand1 expr) state)
-           (compareConditional (operand2 expr) state)))
-      ((eq? (operator expr) '<=)
-       (<= (compareConditional (operand1 expr) state)
-           (compareConditional (operand2 expr) state)))
+       (eq? (M_value (operand1 expr) state)
+            (M_value (operand2 expr) state)))
       ((eq? (operator expr) '!=)
-       (not (eq? (compareConditional (operand1 expr) state)
-                 (compareConditional (operand2 expr) state))))
+       (not (eq? (M_value (operand1 expr) state)
+             (M_value (operand2 expr) state))))
+      ((eq? (operator expr) '>=)
+       (>= (M_value (operand1 expr) state)
+           (M_value (operand2 expr) state)))
+      ((eq? (operator expr) '<=)
+       (<= (M_value (operand1 expr) state)
+           (M_value (operand2 expr) state)))
       ((eq? (operator expr) '>)
-       (> (compareConditional (operand1 expr) state)
-          (compareConditional (operand2 expr) state)))
+       (> (M_value (operand1 expr) state)
+          (M_value (operand2 expr) state)))
       ((eq? (operator expr) '<)
-       (< (compareConditional (operand1 expr) state)
-          (compareConditional (operand2 expr) state)))
-      ; do we need a default case here?
+       (< (M_value (operand1 expr) state)
+          (M_value (operand2 expr) state)))
+      (else (error "invalid condition input"))
       )))
 
 ; #! tests for comparison operators
@@ -79,16 +115,6 @@
 ; (10 <= 5)                 ; returns #t
 ; !#
 
-;;; some other stuff
-(define true #t)
-(define false #f)
-
-;;; not sure if we'll need these
-(define getFirstVar caar)
-(define getFirstValue cadar)
-(define restOf
-    (lambda (state)
-        (cons (cdar state) (cdadr state))))
 
 ;;; operator and operands functions ;;;
 ;; @param expr the expression to find its operator/operands
