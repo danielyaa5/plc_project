@@ -4,14 +4,17 @@
 ;;; returns the given value or the evaluated value of the given calculation.
 ;;; @param 
 (define returnStatement
-  (lambda (value)
+  (lambda (expr)
     (cond
-      (((number? value) ; if input is a number, just return that
-       value
-       ))
-      ((pair? (value))
-       value
+      ((number? expr) ; if input is a number, just return that
+       expr
+       'null)
+      ((pair? expr)
+       expr
        ); if input is a statement, evaluate that
+      ((expression? (expr))
+       0
+       )
       (else
        0
        )               ; not sure how to handle other cases
@@ -27,41 +30,45 @@
 ;!#
 
 ;;; boolean operators ;;;
-;;; X <boolOper> Y, where <boolOper> -> &&, ||, ! (but ! is a different case)
-;;; X, Y: the expressions to be evaluated
+;;; assuming that format would be (|| X Y); where X Y are operands and || is the operator.
 
-(define booleanOperations
-  (lambda (X boolOper Y)
+(define booleanCondition
+  (lambda (expr state)
     (cond
-      ((eq? boolOper '&&)
-       (AND X Y))
-      ((eq? boolOper '||)
-       (OR X Y))
-      (else 'foo ; handle other case?
-       ))))
+      ((eq? (operator expr) '&&)
+       (and (booleanCondition (operand1 expr) state)
+            (booleanCondition (operand2 expr) state)))
+      ((eq? (operator expr) '||)
+       (or (booleanCondition (operand1 expr) state)
+           (booleanCondition (operand2 expr) state)))
+      (else 'null); handle other case?
+       )))
       ; (('!) (NOT X Y))
-      
-
-; #! tests for boolean operators
-; (#t || #f)                ; returns #t
-; (#t && #f)                ; returns #f
-; (#f || #f)                ; returns #f
-; (!#t)                     ; returns #f
-; !#
-
 
 ;;; comparison operators ;;;
 ;;; X <comparisonOper> Y, where <comparisonOper> -> ==, !=, <, >, <=. >=
 ;;; X, Y: the expressions to be evaluated
-(define compare
-  (lambda (X compareOper Y state)
+(define compareConditional
+  (lambda (expr state)
     (cond
-      ((eq? compareOper '==) (eq? X Y))
-      ((eq? compareOper '>=) (>= X Y))
-      ((eq? compareOper '<=) (<= X Y))
-      ((eq? compareOper '!=) !(eq? X Y))
-      ((eq? compareOper '>) (> X Y))
-      ((eq? compareOper '<) (< X Y))
+      ((eq? (operator expr) '==)
+       (eq? (compareConditional (operand1 expr) state)
+            (compareConditional (operand2 expr) state)))
+      ((eq? (operator expr) '>=)
+       (>= (compareConditional (operand1 expr) state)
+           (compareConditional (operand2 expr) state)))
+      ((eq? (operator expr) '<=)
+       (<= (compareConditional (operand1 expr) state)
+           (compareConditional (operand2 expr) state)))
+      ((eq? (operator expr) '!=)
+       (not (eq? (compareConditional (operand1 expr) state)
+                 (compareConditional (operand2 expr) state))))
+      ((eq? (operator expr) '>)
+       (> (compareConditional (operand1 expr) state)
+          (compareConditional (operand2 expr) state)))
+      ((eq? (operator expr) '<)
+       (< (compareConditional (operand1 expr) state)
+          (compareConditional (operand2 expr) state)))
       ; do we need a default case here?
       )))
 
@@ -72,27 +79,32 @@
 ; (10 <= 5)                 ; returns #t
 ; !#
 
+;;; some other stuff
 (define true #t)
 (define false #f)
 
+;;; not sure if we'll need these
 (define getFirstVar caar)
 (define getFirstValue cadar)
 (define restOf
     (lambda (state)
         (cons (cdar state) (cdadr state))))
 
-;;; Mvalue ;;;
-;;; returns the M_value of the expression
-(define M_value
-  (lambda (expression)
-    (cond
-      ((number? expression) expression)
-      ((not (list? expression)) (lookupValue expression state)) ;lookupValue not implemented
-      ((eq? 'true) true)
-      ((eq? 'false) false)
-      ((eq? '+ (operator expression)) (+ (M_value (operand1 expression)) (M_value (operand2 expression))))
-      ((eq? '- (operator expression)) (- (M_value (operand1 expression)) (M_value (operand2 expression))))
-      ((eq? '* (operator expression)) (* (M_value (operand1 expression)) (M_value (operand2 expression))))
-      ((eq? '/ (operator expression)) (quotient (M_value (operand1 expression)) (M_value (operand2 expression))))
-      ((eq? '% (operator expression)) (remainder (M_value (operand1 expression)) (M_value (operand2 expression))))
-      (else (error 'unknown "unknown expression"))))))
+;;; operator and operands functions ;;;
+;; @param expr the expression to find its operator/operands
+;; @returns the operator/operand of given expression
+;
+; operator: returns the operator of the given expression;   usage: (operator ('= x 5)) => '=
+; operand1: returns the left-hand operand of the given expression; (operand1 ('= x 5)) => x
+; operand2: returns the righthand operand of the given expression; (operand2 ('= x 5)) => 5
+(define operator
+  (lambda (expr)
+    (car expr)))
+
+(define operand1
+  (lambda (expr)
+    (cadr expr)))
+
+(define operand2
+  (lambda (expr)
+    (caddr expr)))
