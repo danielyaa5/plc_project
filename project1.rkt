@@ -1,4 +1,15 @@
-;;; runStatement ;;;
+;;; go ;;;
+;;; the upper-level logic. reads the entire list of statements and calls run on each.
+;;; when done, returns the state.
+(define go
+  (lambda (stmts state)
+    (if (null? (cdr stmts))
+        state
+        (run (car stmts) state)
+     )))
+
+
+;;; run ;;;
 ;;; the upper-level logic. reads each line and runs it
 (define run
   (lambda (expr state)
@@ -9,15 +20,13 @@
     ((eq? 'var (car expr)) (declareStatement (restOf expr) state))
     ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state))))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
 
-
 ;;; M_state-add ;;;
 ;;; Adds a value into the M_state
 (define M_state-add
   (lambda (variable value state)
     (cond
       ((null? value) (cons (cons variable (cons '() '())) state))
-      (else (cons (cons variable (cons (M_value value state) '())) state)))
-    ))
+      (else (cons (cons variable (cons (M_value value state) '())) state)))))
 
 ;;; M_state-update ;;;
 ;;; updates a value in the M_state
@@ -96,10 +105,10 @@
 ;;; assign statement ;;; e.g. (x 3)
 (define assignStatement
   (lambda (stmt state)
-    ((null? (M_lookup (operator stmt) state))
-            (M_state-add (operator stmt) (M_value (cadr stmt) state) state)
-            (M_state-update (operator stmt) (M_value (cadr stmt) state) state)
-            )))
+    (cond
+      ((null? (M_lookup (operator stmt) state)) M_state-add (operator stmt) (M_value (cadr stmt) state) state)
+      ((eq? 'UNDEFINED (M_lookup (operator stmt) state)) (M_state-update (operator stmt) (M_value (cadr stmt) state) state)
+            ))))
 
 ;;; declare statement ;;; e.g. (x), (x 3), or even (x (+ 3 5))
 (define declareStatement
@@ -107,17 +116,15 @@
     (cond
       ((null? (cdr stmt)) (M_state-add stmt 'UNDEFINED state))
       ((null? (M_lookup (car stmt) state)) (M_state-add (car stmt) (M_value (cdr stmt) state) state))
-    
      )))
             
 ;;; if statement ;;;
 ;;; if <cond> <stmt> <elseStmt>
 (define ifStatement
   (lambda (cond stmt elseStmt state)
-    (cond
-      ((eq? (M_cond cond state) #t)
-       (M_value stmt state)
-       (M_value elseStmt state)
+    ((if (eq? (M_cond cond state) true)
+         (M_value stmt state)
+         (M_value elseStmt state)
        ))))
 
 ;;; while statement ;;;
