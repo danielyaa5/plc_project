@@ -40,6 +40,10 @@ The following are implemented:
 - Short-circuit evaluation of `&&` or `||` are *not* implemented.
 - The program does not necessarily detects an error if there is a mismatching type
 
+## Naming convention
+- Function name ending with `?` returns boolean value; e.g. `statement?` will check whether the given parameter is a statement or not, and return either `#t` or `#f`.
+- "M-State" functions will be the following format: `M_state-doSomething`
+
 ## Credit
 - Daniel Yakobian `djy18`
 - Justin Wang `jsw104`
