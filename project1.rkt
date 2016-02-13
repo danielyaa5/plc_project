@@ -24,10 +24,12 @@
     (cond
       ((eq? 'return (car expr)) (returnStatement (cadr expr) state))
       ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
-      ((eq? 'if (car expr)) (ifStatement (restOf expr) state))
+      ((and (eq? 'if (car expr))(null? (cdddr expr))) (ifStatement (cadr expr) (caddr expr) state))
+      ((eq? 'if (car expr)) (if-elseStatement (cadr expr) (caddr expr) (cadddr expr) state))
       ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
       ((eq? 'var (car expr)) (declareStatement (restOf expr) state))
-      ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state)))
+      ((eq? '= (car expr)) (assignStatement (restOf expr) state))
+      ; ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state)))
       ))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
 
 ;;; M_state-add ;;;
@@ -35,8 +37,8 @@
 (define M_state-add
   (lambda (variable value state)
     (cond
-      ((null? value) (cons (cons variable (cons '() '())) state))
-      (else (cons (cons variable (M_value value state)) state)))))
+      ((null? value) (cons (cons variable (cons 'UNDEFINED '())) state))
+      (else (cons (cons variable (cons (M_value value state) '())) state)))))
 
 ;;; M_state-update ;;;
 ;;; updates a value in the M_state
@@ -45,7 +47,7 @@
   (lambda (variable value state)
     (cond
       ((eq? (car (car state)) variable) (M_state-add variable value (cdr state)))
-      ((null? (M_lookup variable state) (error "undeclared variable")))
+      ((null? (M_lookup variable state)) (error "undeclared variable"))
       (else (cons (car state) (M_state-update variable value (cdr state)))))))
 
 ;;; M_value ;;;
@@ -53,12 +55,13 @@
 (define M_value
   (lambda (expr state)
     (cond
+      ((null? expr) (error "variable does not have value stored"))
       ((eq? 'true expr) true)
       ((eq? 'false expr) false)
       ((number? expr) expr)
       ((atom? expr) (M_value (M_lookup expr state) state))
       ((and (eq? (length expr) 2) (eq? '- (operator expr))) (* -1 (M_value (operand1 expr) state)))
-      ((eq? '= (operator expr)) (M_state-add (operand1 expr) (operand2 expr) state))
+      ((eq? '= (operator expr)) (assignStatement (restOf expr) state))
       ((eq? '+ (operator expr)) (+ (M_value (operand1 expr) state) 
                                    (M_value (operand2 expr) state)))
       ((eq? '- (operator expr)) (- (M_value (operand1 expr) state)
@@ -69,7 +72,7 @@
                                           (M_value (operand2 expr) state)))
       ((eq? '% (operator expr)) (remainder (M_value (operand1 expr) state) 
                                            (M_value (operand2 expr) state)))
-      
+      (else (M_cond expr state))
       ;(else (error "not recognized"))
       )))
 
@@ -118,32 +121,44 @@
 (define assignStatement
   (lambda (stmt state)
     (cond
-      ((null? (M_lookup (operator stmt) state)) M_state-add (operator stmt) (M_value (cadr stmt) state) state)
-      ((eq? 'UNDEFINED (M_lookup (operator stmt) state)) (M_state-update (operator stmt) (M_value (cadr stmt) state) state)
-            ))))
+      ((and (atom? (cadr stmt)) (null? (M_lookup (cadr stmt) state))) (error "undeclared variable"))
+      ((eq? 'UNDEFINED (M_lookup (operator stmt) state)) (M_state-update (operator stmt) (M_value (cadr stmt) state) state))
+      ((atom? (M_lookup (operator stmt) state)) (M_state-update (operator stmt) (M_value (cadr stmt) state) state))
+
+      (else (M_state-add (operator stmt) (M_value (cadr stmt) state) state))
+      
+      ))) ;;; undef
 
 ;;; declare statement ;;; e.g. (x), (x 3), or even (x (+ 3 5))
 (define declareStatement
   (lambda (stmt state)
     (cond
-      ((null? (cdr stmt)) (M_state-add stmt 'UNDEFINED state))
-      ((null? (M_lookup (car stmt) state)) (M_state-add (car stmt) (M_value (cdr stmt) state) state))
+      ((null? (cdr stmt)) (M_state-add (car stmt) '() state)) ;; undefe
+      ((eq? (M_lookup (car stmt) state) 'UNDEFINED) (M_state-update (car stmt) (cdr stmt)))
+      (else (M_state-add (car stmt) (M_value (cadr stmt) state) state))
      )))
             
 ;;; if statement ;;;
 ;;; if <cond> <stmt> <elseStmt>
 (define ifStatement
-  (lambda (cond stmt elseStmt state)
-    ((if (eq? (M_cond cond state) true)
-         (M_value stmt state)
-         (M_value elseStmt state)
-       ))))
+  (lambda (condition stmt state)
+    (if (eq? (M_cond condition state) true)
+         (M_value stmt state) state
+       )))
+
+(define if-elseStatement
+  (lambda (condition stmt elseStmt state)
+    (cond
+         ((eq? (M_cond condition state) #t) (M_value stmt state))
+         (else (M_value elseStmt state))
+         )))
 
 ;;; while statement ;;;
 ;;; while <cond> <stmt>
 (define whileStatement
-  (lambda (cond stmt state)
-    ((eq? (M_cond cond state) true) (M_value stmt))))
+  (lambda (expr state)
+    (if (not (M_cond (car expr) state)) state
+        (whileStatement expr (run (cadr expr) state)))))
   
     
 ;;; boolean operators ;;;
@@ -152,11 +167,11 @@
   (lambda (expr state)
     (cond
       ((eq? (operator expr) '&&)
-       (and (booleanCondition (operand1 expr) state)
-            (booleanCondition (operand2 expr) state)))
+       (and (M_cond (operand1 expr) state)
+            (M_cond (operand2 expr) state)))
       ((eq? (operator expr) '||)
-       (or (booleanCondition (operand1 expr) state)
-           (booleanCondition (operand2 expr) state)))
+       (or (M_cond (operand1 expr) state)
+           (M_cond (operand2 expr) state)))
        )))
 
 ;;; comparison operators ;;;
@@ -203,6 +218,7 @@
 (define operand2 caddr)
 
 
+;;; quicktest, commented out.
+; (parser "test/test20.txt")
+; (go (parser "test/test20.txt") `())
 
-(parser "test/test2.txt")
-(go (parser "test/test2.txt") `())
