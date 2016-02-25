@@ -1,0 +1,327 @@
+
+<!-- saved from url=(0115)https://blackboard.case.edu/bbcswebdav/pid-1299155-dt-content-rid-3885070_1/courses/eecs345_hsc21_3/part2tests.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>Testing Your Interpreter, Part 2</title>
+<style type="text/css"></style></head>
+
+<body>
+<h3>Testing Your Interpreter, Part 2</h3>
+
+<p>Here are some tests for your interpreter.</p>
+
+<p>Test 1: This code should return 20.
+</p><pre>var x = 10;
+{
+  var y = 2;
+  var z = x * y;
+  x = z;
+}
+return x;
+</pre>
+<p></p>
+
+<p>Test 2: This code should return 164.
+</p><pre>var a = 31160;
+var b = 1476;
+if (a &lt; b) {
+  var temp = a;
+  a = b;
+  b = temp;
+}
+var r = a % b;
+while (r != 0) {
+  a = b;
+  b = r;
+  r = a % b;
+}
+return b;
+
+</pre>
+<p></p>
+
+<p>Test 3: This code should return 32.
+</p><pre>var x = 0;
+var y = 10;
+while (!(x &gt;= y) || !(y &gt; 25)) {
+  x = x + 2;
+  y = y + 1;
+}
+return x;
+</pre><p></p>
+
+<p>Test 4: This code should return 2.
+</p><pre>var x = 1;
+var y = x + 1;
+if (x &lt; y) {
+  var z = 10;
+
+  if (x &lt; z) {
+    var swap = y;
+    y = x;
+    x = swap;
+  }
+}
+return x;
+</pre><p></p>
+
+<p>Test 5: This code should give an error.
+</p><pre>var x = 10;
+var y = 4;
+if (x &lt; y) {
+  var min = x;
+}
+else {
+  var min = y;
+}
+return min;
+</pre><p></p>
+
+<p>Test 6: This code should return 25.
+</p><pre>var x = 0;
+x = x + 25;
+return x;
+x = x + 25;
+return x;
+x = x + 25;
+return x;
+</pre><p></p>
+
+<p>Test 7: This code should return 21.
+</p><pre>var x = 0;
+var result = 1;
+
+while (x &lt; 10) {
+  if (result &gt; 15) {
+    return result;
+  }
+  result = result + x;
+  x = x + 1;
+}
+return result;
+</pre><p></p>
+
+<p>Test 8: This code should return 6.
+</p><pre>var x = 0;
+while (x &lt; 6) {
+  x = x + 1;
+  continue;
+  x = x + 100;
+}
+return x;
+
+</pre><p></p>
+
+<p>Test 9: This code should return -1.
+</p><pre>var x = 0;
+while (x &lt; 10) {
+  x = x - 1;
+  break;
+  x = x + 100;
+}
+return x;
+</pre><p></p>
+
+<p>Test 10: This code should return 789.
+</p><pre>var x = 0;
+var y = x;
+var z = y;
+while (1 == 1) {
+  y = y - x;
+  while (2 == 2) {
+    z = z - y;
+    while (3 == 3) {
+      z = z + 1;
+      if (z &gt; 8)
+        break;
+      else
+        continue;
+    }
+    y = y + 1;
+    if (y &lt;= 7)
+      continue;
+    else
+      break;
+  }
+  x = x + 1;
+  if (x &gt; 6)
+    break;
+  else
+    continue;
+}
+return x * 100 + y * 10 + z;
+</pre><p></p>
+
+<p>Test 11: This code should give an error.
+</p><pre>var x = 0;
+while (x &lt; 10) {
+  var y = 0;
+  x = x + 1;
+  y = y - 1;
+  break;
+}
+if (x &gt; 0) {
+  x = y;
+}
+return x;
+</pre><p></p>
+
+<p>Test 12: This code should give an error.
+</p><pre>var x = 1;
+var y = 2;
+if (x &lt; y) {
+  var z = 0;
+  while (z &lt; 100) {
+    var a = 1;
+    z = z + a;
+    continue;
+    z = 1000;
+  }
+  if (z != x) {
+    z = a;
+  }
+}
+return x;
+</pre><p></p>
+
+<p>Test 13: This code should give an error.
+</p><pre>var x = 1;
+break;
+return x;
+</pre><p></p>
+
+<p>Test 14: This code should return 12.
+</p><pre>var x = 1;
+while (true) {
+  x = x + 1;
+  if (x &gt; 10 &amp;&amp; x % 2 == 0)
+   break;
+}
+return x;
+</pre><p></p>
+
+
+
+<p>Test 15 should return 125.
+</p><pre>
+var x;
+
+try {
+  x = 20;
+  if (x &lt; 0)
+    throw 10;
+  x = x + 5;
+}
+catch(e) {
+  x = e;
+}
+finally {
+  x = x + 100;
+}
+return x;
+</pre>
+<p></p>
+
+<p>Test 16 should return 110.
+</p><pre>var x;
+
+try {
+  x = 20;
+  if (x &gt; 10)
+    throw 10;
+  x = x + 5;
+}
+catch(e) {
+  x = e;
+}
+finally {
+  x = x + 100;
+}
+return x;
+</pre>
+<p></p>
+
+<p>Test 17 should return 2000400.
+</p><pre>var x = 0;
+var j = 1;
+
+try {
+  while (j &gt;= 0) {
+    var i = 10;
+    while (i &gt;= 0) {
+      try {
+        if (i == 0)
+          throw 1000000;
+        x = x + 10*i / i;
+      }
+      catch(e) {
+        if (j == 0)
+          throw 1000000;
+        x = x + e / j;
+      }
+      i = i - 1;
+    }
+    j = j - 1;
+  }
+}
+catch (e2) {
+  x = x * 2;
+}
+return x;
+</pre>
+<p></p>
+
+<p>Test 18 should return 101.
+</p><pre>var x = 10;
+var result = 1;
+
+try {
+  while (x &lt; 10000) {
+     result = result - 1;
+     x = x + 10;
+
+     if (x &gt; 1000) {
+       throw x;
+     }
+     else if (x &gt; 100) {
+        break;
+     }
+  }
+}
+finally {
+  result = result + x;
+}
+return result;
+</pre><p></p>
+
+<p>Test 19 should give an error.
+</p><pre>var x = 10;
+var result = 1;
+
+try {
+  while (x &lt; 10000) {
+    result = result - 1;
+    x = x * 10;
+
+    if (x &gt; 1000)
+      throw x;
+  }
+}
+catch (ex) {
+  throw 1;
+}
+return result;
+</pre><p></p>
+
+<h4> Additional Test for Those Seeking an Extra Challenge</h4>
+
+<p>Test 20: This code should return 21.
+</p><pre>var x = 0;
+while ((x = x + 1) &lt; 21)
+  x = x;
+return x;
+</pre><p></p>
+
+
+
+
+</body></html>

@@ -1,0 +1,116 @@
+
+<!-- saved from url=(0110)https://blackboard.case.edu/bbcswebdav/pid-1299155-dt-content-rid-3885069_1/courses/eecs345_hsc21_3/part2.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+
+<title>EECS 345: Interpreter Project, Part 2</title>
+<style type="text/css"></style></head>
+
+<body>
+<h2>EECS 345: Programming Language Concepts</h2>
+<h2>Interpreter Project, Part 2</h2>
+<h3>Due Friday, March 4</h3>
+
+<p><em>For this and all Interpreter Project's, you are welcome to work in groups, but each person is expected to submit and be responsible for their own interpreter.
+</em></p>
+
+<p>In this homework, you will expand on the interpreter of part 1 adding code blocks as well as "goto" type constructs: break, continue, (true) return, and throw.
+and continue and blocks.  We still assume all variables store either an integer or a boolean value.
+<em>For those wanting an extra challenge</em>: you are to again assume that expressions can have side effects.  Specifically, you should assume that any expression
+can include an assignment operator that returns a value.</p>
+
+<p>Please note: a portion of your grade in this project will be correcting the errors you had in Part 1.</p>
+
+<p>The parser you used in part 1 supports all of the language features used in this assignment.  Here are the new language constructs you need to implement:
+</p><pre>break;             =&gt;   (break)
+continue;          =&gt;   (continue)
+throw e;           =&gt;   (throw e)
+
+if (i &lt; j) {       =&gt;   (if (&lt; i j) (begin (= i (+ i 1)) (= j (+ j 1))))
+  i = i + 1;
+  j = j - 1;
+}
+
+try {                      =&gt;   (try <em>body</em> (catch (e) <em>body</em>) (finally <em>body</em>))
+  <em>body</em>
+}
+catch (e) {
+  <em>body</em>
+}
+finally {
+  <em>body</em>
+}
+</pre>
+Note that either the finally or the catch block may be empty:
+<pre>try {                     =&gt;  (try <em>body</em> (catch (e) <em>body</em>) ())
+  <em>body</em>
+}
+catch (e) {
+  body
+}
+</pre>
+<p></p>
+
+<p>Please note:
+</p><ul>
+<li>As with C and Java, a block of code can appear anywhere and not only as the body of an if statement or a loop. </li>
+<li>As with C and Java, the break and continue apply to the immediate loop they are inside.  There are no labels in our interpreter, and so there will be no breaking out of multiple loops with one break statement.</li>
+<li>As there is no type checking in our language, only one catch statement per try block is allowed. </li>
+</ul>
+<p></p>
+
+<h4>Style Guidelines</h4>
+<p>You do not have to stick to strict functional programming style, but you should avoid
+global variables and heavy use of <tt>let</tt> because they will make your life harder.
+You also should not use <tt>set!</tt> (except for the recommended state change below).</p>
+ 
+<p>As with the last project, your program should clearly distinguish, by naming convention and code organization, functions that are doing the <tt>M_state</tt> operations from ones doing the <tt>M_value</tt> and <tt>M_boolean</tt> operations.</p>
+
+<p>Also as before, the launching point of your interpreter should be a function called <tt>interpret</tt> that takes a filename, calls <tt>parser</tt>
+with the filename, evaluates the parse tree returned by <tt>parser</tt>, and returns the
+proper value.  You are to maintain
+a state for the variables and return an error message if the user attempts to use a variable 
+before it is initialized.</p>
+
+<h4>Implementing the "Goto" constructs</h4>
+
+<p>You need to use continuations to properly implement return, break, continue, and throw.  For each, you have two options.  You can make your interpreter tail-recursive with continuation passing style (note that only the M_state functions must be
+tail recursive) or you can use call/cc.  Both techniques are equally challenging.  You are also welcome to use cps for some of the constructs and call/cc for others. 
+</p>
+
+<h4>The Program State</h4>
+
+<p>To implement blocks, you need to make the following <strong>required</strong> change to the state/environment.
+In addition, because this interpreter does not require a lot of new features from the previous one, there is a
+<strong>recommended</strong> change to the state that may help reduce the work required when we get to Part 3 of the interpreter.</p>
+
+<p><strong>The required change</strong>:  Your state must now be a list of <em>layers</em>.  Each layer will contain a list of variables
+and bindings similar to the basic state of part 1.  The initial state consist of a single layer.
+Each time a new block is entered, you must "cons" a new layer to the front of your state (but use abstraction and give the operation a better name than "cons").
+Each time a variable is declared, that variable's binding goes into the top layer.
+Each time a variable is accessed (either to lookup its binding or to change it), the search must start in the top layer and work down.
+When a block is exited, the layer must be popped off of the state, deleting any variables that were declared inside the block.</p>
+
+<p><strong>A reminder about a note from part 1</strong>:
+Your state needs to store binding pairs, but the exact implementation is up to you. I recommend either a list of binding pairs (for example: <tt>((x 5) (y 12) ...)</tt> ),
+or two lists, one with the variables and one with the values (for example: <tt>((x y ...) (5 12 ...))</tt>).  The first option will be simpler to program, but the second will
+be more easily adapted supporting objects at the end of the course.</p>
+
+<p><strong>The recommended change</strong>: In Part 3 of the interpreter, you will need to implement function/method calls and global variables.
+Thus, even if you are not doing the extra coding challenge, you will need to handle functions that produce side effects.
+If you would like a simpler way to deal with side effects,
+I recommend the following break from strict functional style coding.  Instead of binding each variable to its value, we will bind the variable to a <em>box</em> that contains its value.
+You can think of a box as a pointer to a memory location, and thus the values stored in the environment will be pointers to the actual data (similar to how Java implements non-primitive types).
+Using boxes, you will not need separate <tt>M_value</tt> and <tt>M_state</tt> functions for handling function calls.
+Instead, the function/method call <tt>M_value</tt> mapping will be able to change the values of global variables.
+The Scheme commands are:<br>
+<tt>(box v)</tt>:  places <em>v</em> into a <em>box</em> and returns the box<br>
+<tt>(unbox b)</tt>:  returns the value stored in box <em>b</em><br>
+<tt>(set-box! b v)</tt>: changes the value stored in box <em>b</em> to value <em>v</em>.<br>
+Note that the <tt>set-box!</tt> command does not return a value.  You should embed it in a <tt>begin</tt> function.  Scheme <tt>begin</tt> takes one or more expressions and returns the value of the last expression.
+For example, <tt>(begin (set-box! b v) #t)</tt> will return <tt>#t</tt>.</p>
+
+
+
+
+
+</body></html>
