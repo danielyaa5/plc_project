@@ -3,6 +3,7 @@
 ;;; interpret
 (define interpret
   (lambda (filename)
+    (
     (go (parser filename) '())))
 
 
@@ -22,13 +23,13 @@
 (define run
   (lambda (expr state)
     (cond
-      ((eq? 'return (car expr)) (returnStatement (cadr expr) state))
-      ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
+      ((eq? 'return  (car expr)) (returnStatement (cadr expr) state))
+      ((eq? 'while   (car expr)) (whileStatement (restOf expr) state))
       ((and (eq? 'if (car expr))(null? (cdddr expr))) (ifStatement (cadr expr) (caddr expr) state))
-      ((eq? 'if (car expr)) (if-elseStatement (cadr expr) (caddr expr) (cadddr expr) state))
-      ((eq? 'while (car expr)) (whileStatement (restOf expr) state))
-      ((eq? 'var (car expr)) (declareStatement (restOf expr) state))
-      ((eq? '= (car expr)) (assignStatement (restOf expr) state))
+      ((eq? 'if      (car expr)) (if-elseStatement (cadr expr) (caddr expr) (cadddr expr) state))
+      ((eq? 'while   (car expr)) (whileStatement (restOf expr) state))
+      ((eq? 'var     (car expr)) (declareStatement (restOf expr) state))
+      ((eq? '=       (car expr)) (assignStatement (restOf expr) state))
       ; ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state)))
       ))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
 
@@ -200,6 +201,17 @@
       (else (error "invalid condition input"))
       )))
 
+
+(define beginBlock
+  (lambda (stmt state return break cont)
+    (run (cdr stmt)
+         (return env)
+         (return)
+         (lambda (v) (break (return v)))
+         (lambda (v)
+
+
+  
 ; #! tests for comparison operators
 ; (3 >= 3)                  ; returns #t
 ; (10 == 11)                ; returns #f
