@@ -1,36 +1,48 @@
 (load "simpleParser.scm")
 
-;;; interpret
+;;; interpret ;;;
+;;; reads in the file (test suite) and runs it.
 (define interpret
   (lambda (filename)
-    (
-    (go (parser filename) '())))
-
+    (call/cc (lambda (return)
+               (go (parser filename)
+                   '()
+                   return
+                   (lambda (v) (error "Unaccpetable break exception"))
+                   (lambda (v) (error "Unacceptable continue exception"))
+                   )))))
 
 ;;; go ;;;
 ;;; the upper-level logic. reads the entire list of statements and calls run on each.
 ;;; when done, returns the state.
 (define go
-  (lambda (stmts state)
-    (if (not (null? stmts))         
-        (go (cdr stmts) (run (car stmts) state))
-        (M_value 'return state)
-     )))
+  (lambda (stmts state return break continue)
+    (if (null? stmts)
+        state
+        (go (cdr stmts) (run (car stmts) state return break continue) return break continue)
+        )))
 
 
 ;;; run ;;;
 ;;; the upper-level logic. reads each line and runs it
 (define run
-  (lambda (expr state)
+  (lambda (stmt state return break continue)
     (cond
-      ((eq? 'return  (car expr)) (returnStatement (cadr expr) state))
-      ((eq? 'while   (car expr)) (whileStatement (restOf expr) state))
-      ((and (eq? 'if (car expr))(null? (cdddr expr))) (ifStatement (cadr expr) (caddr expr) state))
-      ((eq? 'if      (car expr)) (if-elseStatement (cadr expr) (caddr expr) (cadddr expr) state))
-      ((eq? 'while   (car expr)) (whileStatement (restOf expr) state))
-      ((eq? 'var     (car expr)) (declareStatement (restOf expr) state))
-      ((eq? '=       (car expr)) (assignStatement (restOf expr) state))
-      ; ((eq? (car expr) (M_lookup (car expr) state) (assignStatement expr state)))
+      ((eq? 'return  stmt) (return             (M_value (cadr stmt) state)))
+      ((eq? 'while   stmt) (whileStatement     (restOf stmt) state return))
+      ((and (eq? 'if stmt) (null? (cdddr stmt)))
+                                 (ifStatement        (cadr stmt) (caddr stmt)
+                                                                   state return break continue))
+      ((eq? 'if      stmt) (if-elseStatement   (cadr stmt) (caddr stmt) (cadddr expr) 
+                                                                   state return break continue))
+      ((eq? 'while   stmt) (whileStatement     (restOf stmt) state return))
+      ((eq? 'var     stmt) (declareStatement   (restOf stmt) state))
+      ((eq? '=       stmt) (assignStatement    (restOf stmt) state))
+      ((eq? 'begin   stmt) (beginBlock         (restOf stmt) state return break continue))
+      ((eq? 'break   stmt) (break                            state))
+      ((eq? 'continue stmt) (continue                        state))
+      ((eq? 'throw   stmt) (throw                            state))
+      (else (M_value (restOf stmt) state)) ; I'm not sure if we need this???
       ))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
 
 ;;; M_state-add ;;;
@@ -40,6 +52,7 @@
     (cond
       ((null? value) (cons (cons variable (cons 'UNDEFINED '())) state))
       (else (cons (cons variable (cons (M_value value state) '())) state)))))
+
 
 ;;; M_state-update ;;;
 ;;; updates a value in the M_state
@@ -56,9 +69,7 @@
 (define M_value
   (lambda (expr state)
     (cond
-      ((null? expr) (error "variable does not have value stored"))
-      ((eq? 'true expr) true)
-      ((eq? 'false expr) false)
+      ((null? expr) '())
       ((number? expr) expr)
       ((atom? expr) (M_value (M_lookup expr state) state))
       ((and (eq? (length expr) 2) (eq? '- (operator expr))) (* -1 (M_value (operand1 expr) state)))
@@ -79,14 +90,14 @@
 
 ;;; M_lookup ;;;
 ;;; looks up the value of the given variable.
-;;; If the variable does not exist in state, return an empty list.
+;;; If the variable does not exist in state, return false (#f)
 (define M_lookup
   (lambda (var state)
     (cond
-      ((null? state) '()) ; variable does not exist in state
+      ((null? state) #f) ; variable does not exist in state
       ((eq? var (getFirstVar state)) (getFirstValue state))
       (else (M_lookup var (cdr state)))
-      )))
+    )))
 
 ;;; condition ;;;
 ;;; checks what kind of conditional operation the expression is and calls appropriate function
@@ -95,8 +106,8 @@
   (lambda (expr state)
     (cond
       ((number? expr) expr)
-      ((eq? 'true expr) true)
-      ((eq? 'false expr) false)
+      ((eq? 'true expr) 'true)
+      ((eq? 'false expr) 'false)
       ((eq? (operator expr) '!) (not (M_value (operand1 expr) state)))
       ((or (eq? (operator expr) '&&) (eq? (operator expr) '||))
        (booleanCondition expr state))
@@ -110,7 +121,7 @@
   (lambda (x)
     (not (or (pair? x) (null? x)))))
 (define restOf cdr)
-                 
+
 ;;; return statement ;;;
 ;;; returns the given value or the evaluated value of the given calculation.
 ;;; @param 
@@ -125,7 +136,7 @@
       ((and (atom? (cadr stmt)) (null? (M_lookup (cadr stmt) state))) (error "undeclared variable"))
       ((eq? 'UNDEFINED (M_lookup (operator stmt) state)) (M_state-update (operator stmt) (M_value (cadr stmt) state) state))
       ((atom? (M_lookup (operator stmt) state)) (M_state-update (operator stmt) (M_value (cadr stmt) state) state))
-
+      
       (else (M_state-add (operator stmt) (M_value (cadr stmt) state) state))
       
       ))) ;;; undef
@@ -137,31 +148,36 @@
       ((null? (cdr stmt)) (M_state-add (car stmt) '() state)) ;; undefe
       ((eq? (M_lookup (car stmt) state) 'UNDEFINED) (M_state-update (car stmt) (cdr stmt)))
       (else (M_state-add (car stmt) (M_value (cadr stmt) state) state))
-     )))
-            
+      )))
+
 ;;; if statement ;;;
 ;;; if <cond> <stmt> <elseStmt>
 (define ifStatement
-  (lambda (condition stmt state)
+  (lambda (condition stmt state return break continue)
     (if (eq? (M_cond condition state) true)
-         (M_value stmt state) state
-       )))
+        (M_value stmt state) state
+        )))
 
 (define if-elseStatement
-  (lambda (condition stmt elseStmt state)
+  (lambda (condition stmt elseStmt state return break continue)
     (cond
-         ((eq? (M_cond condition state) #t) (M_value stmt state))
-         (else (M_value elseStmt state))
-         )))
+      ((eq? (M_cond condition state) #t) (M_value stmt state return break continue))
+      (else (M_value elseStmt state))
+      )))
 
 ;;; while statement ;;;
 ;;; while <cond> <stmt>
 (define whileStatement
-  (lambda (expr state)
-    (if (not (M_cond (car expr) state)) state
-        (whileStatement expr (run (cadr expr) state)))))
-  
-    
+  (lambda (stmt state return)
+    (call/cc (lambda (break)
+               (letrec ((loop (lambda (cond body state)
+                                (if (M_value cond state)
+                                    (loop cond body (call/cc (lambda (continue) (go body state return break continue))))
+                                    state))))
+                 (loop (car stmt) (cadr stmt) state)))
+             )))
+
+
 ;;; boolean operators ;;;
 ;;; assuming that format would be (|| X Y); where X Y are operands and || is the operator.
 (define booleanCondition
@@ -173,7 +189,7 @@
       ((eq? (operator expr) '||)
        (or (M_cond (operand1 expr) state)
            (M_cond (operand2 expr) state)))
-       )))
+      )))
 
 ;;; comparison operators ;;;
 ;;; 
@@ -185,7 +201,7 @@
             (M_value (operand2 expr) state)))
       ((eq? (operator expr) '!=)
        (not (eq? (M_value (operand1 expr) state)
-             (M_value (operand2 expr) state))))
+                 (M_value (operand2 expr) state))))
       ((eq? (operator expr) '>=)
        (>= (M_value (operand1 expr) state)
            (M_value (operand2 expr) state)))
@@ -198,20 +214,22 @@
       ((eq? (operator expr) '<)
        (< (M_value (operand1 expr) state)
           (M_value (operand2 expr) state)))
-      (else (error "invalid condition input"))
       )))
 
 
+;;; beginBlock ;;;
+;;; interprets a block
 (define beginBlock
   (lambda (stmt state return break cont)
     (run (cdr stmt)
-         (return env)
+         (return state break cont)
          (return)
          (lambda (v) (break (return v)))
-         (lambda (v)
+         (lambda (v) (cont (return v)))
+         )))
 
 
-  
+
 ; #! tests for comparison operators
 ; (3 >= 3)                  ; returns #t
 ; (10 == 11)                ; returns #f
@@ -231,6 +249,7 @@
 
 
 ;;; quicktest, commented out.
-; (parser "test/test20.txt")
-; (go (parser "test/test20.txt") `())
+(parser "test/test1")
+(go (parser "test/test1") '() '() '() '())
+
 
