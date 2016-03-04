@@ -1,82 +1,133 @@
 (load "simpleParser.scm")
 
-
-; Interprets a file and returns the result.
-(define interpret (lambda (filename)
-    (breakdown (call/cc (lambda (ret)
+;;; interpret ;;;
+;;; the topmost-level logic. reads in a file (test suite) and runs it.
+;; @filename the name/path of the file.
+(define interpret
+  (lambda (filename)
+    (breakdown
+     (call/cc (lambda (return)
       (read_statements
         filename
         (newstate)
-        ret
+        return
         (lambda (v) (error "Unacceptable break statement"))
         (lambda (v) (error "Unacceptable continue statement"))
         ))))))
 
-; Returns the value to human-readable format.
-(define breakdown (lambda (x)
+;;; breakdown ;;;
+;;; breaks down a value (ie. true and false)
+(define breakdown
+  (lambda (value)
     (cond
-      ((and (not (number? x)) x)       "true" )
-      ((and (not (number? x)) (not x)) "false")
-      (else x)
+      ((and (not (number? value)) value)       "true" )
+      ((and (not (number? value)) (not value)) "false")
+      (else value)
       )))
 
-; Interprets a list of parsed statements.
-(define read_statements (lambda (statements state return break cont)
+;;; read_statements ;;;
+;;; reads each statement and recursively runs them
+;; @statements the list of statements
+;; @state the state of current program
+;; @return the return function
+;; @break what to do for break
+;; @continue the continuation
+(define read_statements (lambda (statements state return break continue)
     (if (null? statements)
      state
-     (read_statements (cdr statements) (interpret_statement (car statements) state return break cont) return break cont)
+     (read_statements
+      (cdr statements)
+      (interpret_statement (car statements) state return break continue)
+      return
+      break
+      continue)
      )))
 
-; Interprets a single statement.
-(define interpret_statement (lambda (stmt state ret break cont)
+;;; interpret_statement ;;;
+;;; reads each statement and do the appropriate thing
+;; @stmt the statement
+;; @state the state of current program
+;; @return the return function
+;; @break what to do for break
+;; @continue the continuation
+(define interpret_statement (lambda (stmt state return break continue)
     (cond
-      ((eq? 'return   (keywordOf stmt)) (ret (M_value (operand1 stmt) state)     ))
+      ((eq? 'return   (keywordOf stmt)) (return (M_value (operand1 stmt) state)     ))
       ((eq? '=        (keywordOf stmt)) (M_assign          stmt state               ))
       ((eq? 'var      (keywordOf stmt)) (M_declare         stmt state               ))
-      ((eq? 'if       (keywordOf stmt)) (interpret_if      stmt state ret break cont))
-      ((eq? 'while    (keywordOf stmt)) (interpret_while   stmt state ret           ))
-      ((eq? 'begin    (keywordOf stmt)) (interpret_begin   stmt state ret break cont))
+      ((eq? 'if       (keywordOf stmt)) (interpret_if      stmt state return break continue))
+      ((eq? 'while    (keywordOf stmt)) (interpret_while   stmt state return           ))
+      ((eq? 'begin    (keywordOf stmt)) (interpret_begin   stmt state return break continue))
       ((eq? 'break    (keywordOf stmt)) (break                  state               ))
       ((eq? 'continue (keywordOf stmt)) (cont                   state               ))
-      (else                             (M_value   stmt state               ))
+      ((eq? 'try      (keywordOf stmt)) (interpret_try     stmt state return break continue))
+      (else                             (M_value           stmt state               ))
       )))
 
+; stmt: ("try" trybody (catch (e) body) finallybody 
+(define interpret_try
+  (lambda (stmt state return break continue)
+    (cond
+      ((null? (caddr stmt)) (interpret_begin ((cadr stmt) state return break continue)) ; no finally body
+      ((null? (cadr stmt)) (interpret_begin ((cadr stmt) state return break continue)) ; no catch body
+                           )))))
 
 
-; Interprets an assignment (e.g. "x = 10;").
+;;; M_assign ;;;
+;;; interprets an assignment statement and and adds it
+;; @stmt the assignment statement
+;; @state the state of current program.
 (define M_assign (lambda (stmt state)
     (assign (operand1 stmt) (M_value (operand2 stmt) state) state)
     ))
 
-; Interprets a block (e.g. "{...}").
-(define interpret_begin (lambda (stmt state ret break cont)
-    (popframe
+;;; interpret_begin ;;;
+;;; interprets a begin (block).
+;; @stmt the begin block
+;; @state the state of current program
+;; @return the return function
+;; @break what to do for break
+;; @continue the continuation
+(define interpret_begin (lambda (stmt state return break continue)
+    (popstack
       (read_statements
         (cdr stmt)
-        (pushframe state)
-        ret
+        (pushstack state)
+        return
         (lambda (v)
-          (break (popframe v)))
+          (break (popstack v)))
         (lambda (v)
-          (cont (popframe v)))
+          (continue (popstack v)))
         ))))
 
-; Interprets a declaration (e.g. "var x;" or "var y = 10").
+;;; M_declare ;;;
+;;; interprets a declaration (both declare and declare+assign)
+;; @stmt the declaration statement
+;; @state the state of the current program.
 (define M_declare (lambda (stmt state)
     (if (null? (operand2 stmt))
       (declare (operand1 stmt) state)
       (assign (operand1 stmt) (M_value (operand2 stmt) state) (declare (operand1 stmt) state))
       )))
 
-; Interprets an if statement (e.g. "if (...) ...;" or "if (...) {...} else {...}").
-(define interpret_if (lambda (stmt state ret break cont)
+;;; interpret_if ;;;
+;;; interprets an if statement (both unmatched and matched)
+;; @stmt the if statement
+;; @state the state of the current program
+;; @return the return function
+;; @break what to do for break
+;; @continue the continuation
+(define interpret_if (lambda (stmt state return break continue)
     (cond
-      ((M_value (operand1 stmt) state) (interpret_statement (operand2 stmt) state ret break cont))
+      ((M_value (operand1 stmt) state) (interpret_statement (operand2 stmt) state return break continue))
       ((null? (operand3 stmt)) state)
-      (else (interpret_statement (operand3 stmt) state ret break cont))
+      (else (interpret_statement (operand3 stmt) state return break continue))
       )))
 
-; Interprets the value of a mathematical statement.
+;;; M_value ;;;
+;;; interprets the value of the statement/variable.
+;; @stmt the statement to interpret
+;; @state the state of the current program
 (define M_value (lambda (stmt state)
     (cond
       ((null? stmt) '())
@@ -103,39 +154,44 @@
       (else  (error (cons "Symbol not recognized" (op stmt))))
       )))
 
-; Interprets the value of a while loop.
-(define interpret_while (lambda (stmt state ret)
+;;; interpret_while ;;;
+;;; interprets a while loop.
+;; @stmt the while statement
+;; @state the state of the current program
+;; @return the return function
+(define interpret_while (lambda (stmt state return)
     (call/cc (lambda (break)
-      (letrec ((loop (lambda (test body state)
+      (letrec ((loop (lambda (condition body state)
           (if (M_value test state)
-            (loop test body (call/cc (lambda (cont) (interpret_statement body state ret break cont))))
+            (loop condition body (call/cc (lambda (continue) (interpret_statement body state return break continue))))
             state))))
           (loop (operand1 stmt) (operand2 stmt) state)))
         )))
 
-; The stateironment is stored as a list of frames, ordered by most recent frame
-; first. Each frame has two lists of equal size, the first of variable names,
-; and the second of their values.
 
-; Generates a new stateironment. 
-(define newstate    (lambda ()        (cons (newframe) '())))
 
-; Frame abstractions.
-(define newframe  (lambda ()        '(()())))
-(define names     (lambda (frame)   (car frame)))
-(define vals      (lambda (frame)   (car (cdr frame))))
-(define topframe  (lambda (state)     (car state)))
-(define lowframes (lambda (state)     (cdr state)))
-(define pushframe (lambda (state)     (cons (newframe) state)))
-(define popframe  (lambda (state)     (cdr state)))
-(define inframe?  (lambda (name frame) (not (= -1 (getIndex name (names frame))))))
-(define getval    (lambda (name frame) (itemat (getIndex name (names frame)) (vals frame))))
+;;; state and stack-frames ;;;
+;;; abstractions
+(define newstate    (lambda ()        (cons (newstack) '())))
+(define newstack  (lambda ()        '(()())))
+(define names     (lambda (stack)   (car stack)))
+(define vals      (lambda (stack)   (car (cdr stack))))
+(define topstack  (lambda (state)     (car state)))
+(define lowstacks (lambda (state)     (cdr state)))
+(define pushstack (lambda (state)     (cons (newstack) state)))
+(define popstack  (lambda (state)     (cdr state)))
+(define instack?  (lambda (name stack) (not (= -1 (getIndex name (names stack))))))
+(define getval    (lambda (name stack) (itemat (getIndex name (names stack)) (vals stack))))
 
-; Gets the item in list l at index i, starting from 0.
-(define itemat (lambda (i l)
-    (if (= i 0)
-      (car l)
-      (itemat (- i 1) (cdr l))
+
+;;; itemAt ;;;
+;;; gets the i-th item in list. (0-based list)
+;; @index the index of the item
+;; @list the list to find the item
+(define itemat (lambda (index list)
+    (if (= index 0)
+      (car list)
+      (itemat (- index 1) (cdr list))
       )))
 
 ;;; removeAt ;;;
@@ -182,9 +238,9 @@
 (define declare (lambda (name state)
   (cons
       (cons
-        (cons name          (names (topframe state)))
-      (cons (cons (box 0) (vals  (topframe state))) '()))
-      (lowframes state)
+        (cons name          (names (topstack state)))
+      (cons (cons (box 0) (vals  (topstack state))) '()))
+      (lowstacks state)
       )))
 
 ;;; declared? ;;;
@@ -194,8 +250,8 @@
 (define declared? (lambda (name state)
     (cond
       ((null? state) #f)
-      ((inframe? name (topframe state)) #t)
-      (else (declared? name (lowframes state)))
+      ((instack? name (topstack state)) #t)
+      (else (declared? name (lowstacks state)))
       )))
 
 ;;; assign ;;;
@@ -216,9 +272,9 @@
 ;; @name the name of the variable to find the value of
 ;; @state the state
 (define lookup-ref (lambda (name state)
-    (if (inframe? name (topframe state))
-      (getval name (topframe state))
-      (lookup-ref name (lowframes state))
+    (if (instack? name (topstack state))
+      (getval name (topstack state))
+      (lookup-ref name (lowstacks state))
       )))
 
 (define lookup (lambda (name state) (unbox (lookup-ref name state))))

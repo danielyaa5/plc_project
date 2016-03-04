@@ -1,16 +1,29 @@
+#lang racket
+
 (load "simpleParser.scm")
 
 ;;; interpret ;;;
 ;;; reads in the file (test suite) and runs it.
 (define interpret
   (lambda (filename)
-    (call/cc (lambda (return)
-               (go (parser filename)
-                   '()
-                   return
-                   (lambda (v) (error "Unaccpetable break exception"))
-                   (lambda (v) (error "Unacceptable continue exception"))
-                   )))))
+    (breakdown
+     (call/cc
+      (lambda (return)
+        (go (parser file
+                    '()
+                    return
+                    (lambda (v) (error "Unacceptable break exception"))
+                    (lambda (v) (error "Unacceptable continue exception"))
+                    )))))))
+  
+
+(define breakdown
+  (lambda (value)
+    (cond
+      ((and (not (number? value)) value) "true")
+      ((and (not (number? value)) (not value)) "false")
+      (else value)
+      )))
 
 ;;; go ;;;
 ;;; the upper-level logic. reads the entire list of statements and calls run on each.
@@ -28,20 +41,21 @@
 (define run
   (lambda (stmt state return break continue)
     (cond
-      ((eq? 'return  stmt) (return             (M_value (cadr stmt) state)))
-      ((eq? 'while   stmt) (whileStatement     (restOf stmt) state return))
-      ((and (eq? 'if stmt) (null? (cdddr stmt)))
+      ((eq? 'return  (car stmt)) (return             (M_value (cadr stmt) state)))
+      ((eq? 'while   (car stmt)) (whileStatement     (restOf stmt) state return))
+      ((and (eq? 'if (car stmt)) (null? (cdddr stmt)))
                                  (ifStatement        (cadr stmt) (caddr stmt)
                                                                    state return break continue))
-      ((eq? 'if      stmt) (if-elseStatement   (cadr stmt) (caddr stmt) (cadddr expr) 
+      ((eq? 'if      (car stmt)) (if-elseStatement   (cadr stmt) (caddr stmt) (cadddr expr) 
                                                                    state return break continue))
-      ((eq? 'while   stmt) (whileStatement     (restOf stmt) state return))
-      ((eq? 'var     stmt) (declareStatement   (restOf stmt) state))
-      ((eq? '=       stmt) (assignStatement    (restOf stmt) state))
-      ((eq? 'begin   stmt) (beginBlock         (restOf stmt) state return break continue))
-      ((eq? 'break   stmt) (break                            state))
-      ((eq? 'continue stmt) (continue                        state))
-      ((eq? 'throw   stmt) (throw                            state))
+      ((eq? 'while   (car stmt)) (whileStatement     (restOf stmt) state return))
+      ((eq? 'var     (car stmt)) (declareStatement   (restOf stmt) state))
+      ((eq? '=       (car stmt)) (assignStatement    (restOf stmt) state))
+      ((eq? 'begin   (car stmt)) (beginBlock         (restOf stmt) state return break continue))
+      ((eq? 'break   (car stmt)) (break                            state))
+      ((eq? 'continue (car stmt)) (continue                        state))
+      ((eq? 'throw   (car stmt)) (throw                            state))
+      ((eq? 'try     (car stmt)) (tryBlock           (restOf stmt) state))
       (else (M_value (restOf stmt) state)) ; I'm not sure if we need this???
       ))) ; for assignStatement we need the first one (e.g. we need the x in x = 5)
 
@@ -228,7 +242,11 @@
          (lambda (v) (cont (return v)))
          )))
 
-
+;;; tryBlock ;;;
+;;; interprets a try {...} block
+(define tryBlock
+  (lambda (body state catch finally return break cont)
+    state ))
 
 ; #! tests for comparison operators
 ; (3 >= 3)                  ; returns #t
@@ -249,7 +267,7 @@
 
 
 ;;; quicktest, commented out.
-(parser "test/test1")
-(go (parser "test/test1") '() '() '() '())
+(parser "test/test1.txt")
+(go (parser "test/test1.txt") '() '() '() '())
 
 
