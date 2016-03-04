@@ -162,7 +162,7 @@
 (define interpret_while (lambda (stmt state return)
     (call/cc (lambda (break)
       (letrec ((loop (lambda (condition body state)
-          (if (M_value test state)
+          (if (M_value condition state)
             (loop condition body (call/cc (lambda (continue) (interpret_statement body state return break continue))))
             state))))
           (loop (operand1 stmt) (operand2 stmt) state)))
@@ -288,5 +288,5 @@
 (define keywordOf op)
 
 ;;; quicktest, commented out.
-(parser "test/test1.txt")
-(interpret (parser "test/test1.txt"))
+(parser "test/test11.txt")
+(interpret (parser "test/test11.txt"))
