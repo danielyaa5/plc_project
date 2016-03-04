@@ -52,16 +52,16 @@
 ;; @continue the continuation
 (define interpret_statement (lambda (stmt state return break continue)
     (cond
-      ((eq? 'return   (keywordOf stmt)) (return (M_value (operand1 stmt) state)     ))
-      ((eq? '=        (keywordOf stmt)) (M_assign          stmt state               ))
-      ((eq? 'var      (keywordOf stmt)) (M_declare         stmt state               ))
+      ((eq? 'return   (keywordOf stmt)) (return (M_value (operand1 stmt) state)            ))
+      ((eq? '=        (keywordOf stmt)) (M_assign          stmt state                      ))
+      ((eq? 'var      (keywordOf stmt)) (M_declare         stmt state                      ))
       ((eq? 'if       (keywordOf stmt)) (interpret_if      stmt state return break continue))
-      ((eq? 'while    (keywordOf stmt)) (interpret_while   stmt state return           ))
+      ((eq? 'while    (keywordOf stmt)) (interpret_while   stmt state return               ))
       ((eq? 'begin    (keywordOf stmt)) (interpret_begin   stmt state return break continue))
-      ((eq? 'break    (keywordOf stmt)) (break                  state               ))
-      ((eq? 'continue (keywordOf stmt)) (cont                   state               ))
+      ((eq? 'break    (keywordOf stmt)) (break                  state                      ))
+      ((eq? 'continue (keywordOf stmt)) (continue               state                      ))
       ((eq? 'try      (keywordOf stmt)) (interpret_try     stmt state return break continue))
-      (else                             (M_value           stmt state               ))
+      (else                             (M_value           stmt state                      ))
       )))
 
 ; stmt: ("try" trybody (catch (e) body) finallybody 
