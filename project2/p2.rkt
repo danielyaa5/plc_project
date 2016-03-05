@@ -9,7 +9,7 @@
      (call/cc (lambda (return)
       (read_statements
         filename
-        (newstate)
+        (new_state)
         return
         (lambda (v) (error "Unacceptable break statement"))
         (lambda (v) (error "Unacceptable continue statement"))
@@ -17,6 +17,7 @@
 
 ;;; breakdown ;;;
 ;;; breaks down a value (ie. true and false)
+;; @value the value to break down
 (define breakdown
   (lambda (value)
     (cond
@@ -89,15 +90,15 @@
 ;; @break what to do for break
 ;; @continue the continuation
 (define interpret_begin (lambda (stmt state return break continue)
-    (popstack
+    (popStack
       (read_statements
         (cdr stmt)
-        (pushstack state)
+        (pushStack state)
         return
         (lambda (v)
-          (break (popstack v)))
+          (break (popStack v)))
         (lambda (v)
-          (continue (popstack v)))
+          (continue (popStack v)))
         ))))
 
 ;;; M_declare ;;;
@@ -119,8 +120,8 @@
 ;; @continue the continuation
 (define interpret_if (lambda (stmt state return break continue)
     (cond
-      ((M_value (operand1 stmt) state) (interpret_statement (operand2 stmt) state return break continue))
-      ((null? (operand3 stmt)) state)
+      ((M_value (cadr stmt) state) (interpret_statement (caddr stmt) state return break continue))
+      ((null? (cadddr stmt)) state)
       (else (interpret_statement (operand3 stmt) state return break continue))
       )))
 
@@ -159,39 +160,105 @@
 ;; @stmt the while statement
 ;; @state the state of the current program
 ;; @return the return function
-(define interpret_while (lambda (stmt state return)
+(define interpret_while
+  (lambda (stmt state return)
     (call/cc (lambda (break)
       (letrec ((loop (lambda (condition body state)
           (if (M_value condition state)
             (loop condition body (call/cc (lambda (continue) (interpret_statement body state return break continue))))
             state))))
-          (loop (operand1 stmt) (operand2 stmt) state)))
+          (loop (cadr stmt) (caddr stmt) state)))
         )))
 
 
+;;; new_state ;;;
+;;; returns a new layer of a stack
+(define new_state
+  (lambda ()
+    (cons (new_stack) '())
+    ))
 
-;;; state and stack-frames ;;;
-;;; abstractions
-(define newstate    (lambda ()        (cons (newstack) '())))
-(define newstack  (lambda ()        '(()())))
-(define names     (lambda (stack)   (car stack)))
-(define vals      (lambda (stack)   (car (cdr stack))))
-(define topstack  (lambda (state)     (car state)))
-(define lowstacks (lambda (state)     (cdr state)))
-(define pushstack (lambda (state)     (cons (newstack) state)))
-(define popstack  (lambda (state)     (cdr state)))
-(define instack?  (lambda (name stack) (not (= -1 (getIndex name (names stack))))))
-(define getval    (lambda (name stack) (itemat (getIndex name (names stack)) (vals stack))))
+;;; new_stack ;;;
+;;; returns a new "layer" for a state
+(define new_stack
+  (lambda ()
+    '(()())
+    ))
 
+;;; state_names ;;;
+;;; returns the list of variable names
+;; @stack the stack to return its names of
+(define state_names
+  (lambda (stack)
+    (car stack)
+    ))
+
+;;; state_values ;;;
+;;; returns the list of variable values
+;; @stack the stack to return its values of
+(define state_values
+  (lambda (stack)
+    (cadr stack))
+    ))
+
+;;; currentStack ;;;
+;;; returns the current stack layer
+;; @state the state
+(define currentStack
+  (lambda (state)
+    (car state))
+  )
+
+;;; lowerStacks ;;;
+;;; returns the lower level layers.
+;; @state the state
+(define lowerStacks
+  (lambda (state)
+    (cdr state)
+    ))
+
+;;; pushStack ;;;
+;;; pushes a new state into a new stack.
+;; @state the state
+(define pushStack
+  (lambda (state)
+    (cons (new_stack) state)
+    ))
+
+;;; popStack ;;;
+;;; returns the state layer.
+;; @state the state
+(define popStack
+  (lambda (state)
+    (cdr state)
+    ))
+
+;;; state_exist? ;;;
+;;; checks whether if a variable exists in the stack.
+;; @name the name of the variable
+;; @stack the stack to search in
+(define state_exist?
+  (lambda (name stack)
+    (not (= -1 (getIndex name (state_names stack))))
+    ))
+
+;;; getValue ;;;
+;;; returns the corresponding value of the given variable.
+;; @name the name of the variable
+;; @stack the stack to search in
+(define getValue
+  (lambda (name stack)
+    (itemAt (getIndex name (state_names stack)) (state_values stack))
+    ))
 
 ;;; itemAt ;;;
 ;;; gets the i-th item in list. (0-based list)
 ;; @index the index of the item
 ;; @list the list to find the item
-(define itemat (lambda (index list)
+(define itemAt (lambda (index list)
     (if (= index 0)
       (car list)
-      (itemat (- index 1) (cdr list))
+      (itemAt (- index 1) (cdr list))
       )))
 
 ;;; removeAt ;;;
@@ -220,15 +287,15 @@
 ;;; gets the given item's index
 ;; @name the name of the variable
 ;; @list the list to search
-(define getIndex (lambda (name l)
+(define getIndex (lambda (name list)
     (letrec
-      ((getIndex-cps (lambda (name l k)
+      ((getIndex* (lambda (name list acc)
         (cond
-          ((null? l) -1)
-          ((eq? name (car l)) (k 0))
-          (else (getIndex-cps name (cdr l) (lambda (v) (k (+ v 1)))))
+          ((null? list) -1)
+          ((eq? name (car list)) (acc 0))
+          (else (getIndex-cps name (cdr list) (lambda (v) (acc (+ v 1)))))
           ))))
-      (getIndex-cps name l (lambda (v) v))
+      (getIndex* name list (lambda (v) v))
     )))
 
 ;;; declare ;;;
@@ -238,9 +305,9 @@
 (define declare (lambda (name state)
   (cons
       (cons
-        (cons name          (names (topstack state)))
-      (cons (cons (box 0) (vals  (topstack state))) '()))
-      (lowstacks state)
+        (cons name          (state_names (currentStack state)))
+      (cons (cons (box 0) (state_values  (currentStack state))) '()))
+      (lowerStacks state)
       )))
 
 ;;; declared? ;;;
@@ -250,8 +317,8 @@
 (define declared? (lambda (name state)
     (cond
       ((null? state) #f)
-      ((instack? name (topstack state)) #t)
-      (else (declared? name (lowstacks state)))
+      ((state_exist? name (currentStack state)) #t)
+      (else (declared? name (lowerStacks state)))
       )))
 
 ;;; assign ;;;
@@ -272,11 +339,15 @@
 ;; @name the name of the variable to find the value of
 ;; @state the state
 (define lookup-ref (lambda (name state)
-    (if (instack? name (topstack state))
-      (getval name (topstack state))
-      (lookup-ref name (lowstacks state))
+    (if (state_exist? name (currentStack state))
+      (getValue name (currentStack state))
+      (lookup-ref name (lowerStacks state))
       )))
 
+;;; lookup ;;;
+;;; returns the value of the given variable name.
+;; @name the name of the variable to find the value of
+;; @state the state
 (define lookup (lambda (name state) (unbox (lookup-ref name state))))
 
 
@@ -288,5 +359,5 @@
 (define keywordOf op)
 
 ;;; quicktest, commented out.
-(parser "test/test11.txt")
-(interpret (parser "test/test11.txt"))
+(parser "test/test14.txt")
+(interpret (parser "test/test14.txt"))
