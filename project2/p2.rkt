@@ -13,6 +13,7 @@
         return
         (lambda (v) (error "Unacceptable break statement"))
         (lambda (v) (error "Unacceptable continue statement"))
+        (lambda (v) (error "Unacceptable throw statement"))
         ))))))
 
 ;;; breakdown ;;;
@@ -33,15 +34,16 @@
 ;; @return the return function
 ;; @break what to do for break
 ;; @continue the continuation
-(define read_statements (lambda (statements state return break continue)
+(define read_statements (lambda (statements state return break continue throw)
     (if (null? statements)
      state
      (read_statements
       (cdr statements)
-      (interpret_statement (car statements) state return break continue)
+      (interpret_statement (car statements) state return break continue throw)
       return
       break
-      continue)
+      continue
+      throw)
      )))
 
 ;;; interpret_statement ;;;
@@ -51,27 +53,37 @@
 ;; @return the return function
 ;; @break what to do for break
 ;; @continue the continuation
-(define interpret_statement (lambda (stmt state return break continue)
+(define interpret_statement (lambda (stmt state return break continue throw)
     (cond
       ((eq? 'return   (keywordOf stmt)) (return (M_value (operand1 stmt) state)            ))
       ((eq? '=        (keywordOf stmt)) (M_assign          stmt state                      ))
       ((eq? 'var      (keywordOf stmt)) (M_declare         stmt state                      ))
-      ((eq? 'if       (keywordOf stmt)) (interpret_if      stmt state return break continue))
-      ((eq? 'while    (keywordOf stmt)) (interpret_while   stmt state return               ))
-      ((eq? 'begin    (keywordOf stmt)) (interpret_begin   stmt state return break continue))
+      ((eq? 'if       (keywordOf stmt)) (interpret_if      stmt state return break continue throw))
+      ((eq? 'while    (keywordOf stmt)) (interpret_while   stmt state return       throw   ))
+      ((eq? 'begin    (keywordOf stmt)) (interpret_begin   stmt state return break continue throw))
       ((eq? 'break    (keywordOf stmt)) (break                  state                      ))
       ((eq? 'continue (keywordOf stmt)) (continue               state                      ))
-      ((eq? 'try      (keywordOf stmt)) (interpret_try     stmt state return break continue))
+      ((eq? 'try      (keywordOf stmt)) (interpret_try     (cadr stmt) (caddr stmt) (cadddr stmt) state return break continue throw))
+      ((eq? 'throw    (keywordOf stmt)) (error             (cons "at" (op stmt))           ))
       (else                             (M_value           stmt state                      ))
       )))
 
-; stmt: ("try" trybody (catch (e) body) finallybody 
+
 (define interpret_try
-  (lambda (stmt state return break continue)
+  (lambda (tryBody catch finally state return break continue throw)
     (cond
-      ((null? (caddr stmt)) (interpret_begin ((cadr stmt) state return break continue)) ; no finally body
-      ((null? (cadr stmt)) (interpret_begin ((cadr stmt) state return break continue)) ; no catch body
-                           )))))
+      ((null? tryBody) (read_statements (car (cdr finally)) state return break continue throw))
+      ((eq? 'throw (car (car tryBody))) (interpret_catch (caddr catch) finally (caadr catch) (M_value (cdar tryBody) state) state return break continue throw))
+      (else (interpret_try (cdr tryBody) catch finally (interpret_statement (car tryBody) state return break continue throw) return break continue throw))
+      )))
+
+(define interpret_catch
+  (lambda (catchBody finally nameOfException e state return break continue throw)
+    (cond
+      ((not (null? e)) (interpret_catch catchBody finally nameOfException null (assign nameOfException e state) return break continue throw))
+      ((null? catchBody) (read_statements (cadr finally) state return break continue))
+      (else (interpret_catch (cdr catchBody) finally nameOfException null (interpret_statement (car catchBody) state return break continue) return break continue throw))
+      )))
 
 
 ;;; M_assign ;;;
@@ -89,7 +101,7 @@
 ;; @return the return function
 ;; @break what to do for break
 ;; @continue the continuation
-(define interpret_begin (lambda (stmt state return break continue)
+(define interpret_begin (lambda (stmt state return break continue throw)
     (popStack
       (read_statements
         (cdr stmt)
@@ -99,6 +111,8 @@
           (break (popStack v)))
         (lambda (v)
           (continue (popStack v)))
+        (lambda (v)
+          (throw (popStakc v)))
         ))))
 
 ;;; M_declare ;;;
@@ -118,11 +132,11 @@
 ;; @return the return function
 ;; @break what to do for break
 ;; @continue the continuation
-(define interpret_if (lambda (stmt state return break continue)
+(define interpret_if (lambda (stmt state return break continue throw)
     (cond
-      ((M_value (cadr stmt) state) (interpret_statement (caddr stmt) state return break continue))
-      ((null? (cadddr stmt)) state)
-      (else (interpret_statement (operand3 stmt) state return break continue))
+      ((M_value (operand1 stmt) state) (interpret_statement (operand2 stmt) state return break continue throw))
+      ((null? (operand3 stmt)) state)
+      (else (interpret_statement (operand3 stmt) state return break continue throw))
       )))
 
 ;;; M_value ;;;
@@ -160,16 +174,14 @@
 ;; @stmt the while statement
 ;; @state the state of the current program
 ;; @return the return function
-(define interpret_while
-  (lambda (stmt state return)
+(define interpret_while (lambda (stmt state return throw)
     (call/cc (lambda (break)
       (letrec ((loop (lambda (condition body state)
           (if (M_value condition state)
-            (loop condition body (call/cc (lambda (continue) (interpret_statement body state return break continue))))
+            (loop condition body (call/cc (lambda (continue) (interpret_statement body state return break continue throw))))
             state))))
-          (loop (cadr stmt) (caddr stmt) state)))
+          (loop (operand1 stmt) (operand2 stmt) state)))
         )))
-
 
 ;;; new_state ;;;
 ;;; returns a new layer of a stack
@@ -199,7 +211,7 @@
 (define state_values
   (lambda (stack)
     (cadr stack))
-    ))
+    )
 
 ;;; currentStack ;;;
 ;;; returns the current stack layer
@@ -293,7 +305,7 @@
         (cond
           ((null? list) -1)
           ((eq? name (car list)) (acc 0))
-          (else (getIndex-cps name (cdr list) (lambda (v) (acc (+ v 1)))))
+          (else (getIndex* name (cdr list) (lambda (v) (acc (+ v 1)))))
           ))))
       (getIndex* name list (lambda (v) v))
     )))
@@ -359,5 +371,6 @@
 (define keywordOf op)
 
 ;;; quicktest, commented out.
-(parser "test/test14.txt")
-(interpret (parser "test/test14.txt"))
+;;; tests 5, 11, 12, 13, 19 should throw an error
+(parser "test/test17.txt")
+(interpret (parser "test/test17.txt"))
