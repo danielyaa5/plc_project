@@ -71,8 +71,7 @@
         '()
         (begin
           (unget-next-symbol)
-          (let ((s (statement-parse)))
-            (cons s (compound-statement-parse)))))))
+          (cons (statement-parse) (compound-statement-parse))))))
 
 ; parse a return statement: return followed by a value.
 
@@ -333,5 +332,4 @@
           ((eq? (car firstsymbol) 'ID) (cdr firstsymbol))
           ((eq? (car firstsymbol) 'BOOLEAN) (cdr firstsymbol))
           (else (error 'parser "Unknown statmement")))));)
-
 
