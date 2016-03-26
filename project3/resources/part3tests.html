@@ -1,0 +1,493 @@
+<html>
+<head>
+<title>Testing Your Interpreter, Part 3</title>
+</head>
+
+<body>
+<h3>Testing Your Interpreter, Part 3</h3>
+<p>Test 1: A main with code inside. This code should return 10.</p>
+<pre>function main() {
+  var x = 10;
+  var y = 20;
+  var z = 30;
+  var min = 0;
+
+  if (x &lt; y)
+    min = x;
+  else
+    min = y;
+  if (min &gt; z)
+    min = z;
+  return min;
+}
+</pre>
+<p>Test 2: A function that uses global variables. This code should return 14.</p>
+<pre>var x = 4;
+var y = 6 + x;
+
+function main() {
+  return x + y;
+}
+</pre>
+<p>Test 3: A function that changes global variables. This code should return 45.</p>
+<pre>var x = 1;
+var y = 10;
+var r = 0;
+
+function main() {
+  while (x &lt; y) {
+     r = r + x;
+     x = x + 1;
+  }
+  return r;
+}
+
+</pre>
+<p>Test 4: A recursive function. This code should return 55.</p>
+<pre>function fib(a) {
+  if (a == 0)
+    return 0;
+  else if (a == 1)
+    return 1;
+  else 
+    return fib(a-1) + fib(a-2);
+}
+
+function main() {
+  return fib(10);
+}
+
+</pre>
+<p>Test 5: Functions with multiple parameters that hide global variables. This code should return 1.</p>
+<pre>function min(x, y, z) {
+  if (x &lt; y) {
+    if (x &lt; z)
+      return x;
+    else if (z &lt; x)
+      return z;
+  }
+  else if (y &gt; z)
+    return z;
+  else
+    return y;
+}
+
+var x = 10;
+var y = 20;
+var z = 30;
+
+var min1 = min(x,y,z);
+var min2 = min(z,y,x);
+
+function main() {
+  var min3 = min(y,z,x);
+
+  if (min1 == min3)
+    if (min1 == min2)
+      if (min2 == min3)
+        return 1;
+  return 0;
+}
+</pre>
+
+<p>Test 6: Verifying that your code uses static scoping instead of dynamic scoping. This code should return 115.</p>
+<pre>var a = 10;
+var b = 20;
+
+function bmethod() {
+  var b = 30;
+  return a + b;
+}
+
+function cmethod() {
+  var a = 40;
+  return bmethod() + a + b;
+}
+
+function main () {
+  var b = 5;
+  return cmethod() + a + b;
+}
+</pre>
+
+<p>Test 7: Boolean parameters and return values. This code should return true.</p>
+<pre>function minmax(a, b, min) {
+  if (min &amp;&amp; a &lt; b || !min &amp;&amp; a &gt; b)
+    return true;
+  else
+    return false;
+}
+
+function main() {
+  return (minmax(10, 100, true) &amp;&amp; minmax(5, 3, false));
+}
+</pre>
+
+
+<p>Test 8: Multiple function calls in an expression. This code should return 20.</p>
+<pre>function fact(n) {
+  var f = 1;
+  while (n &gt; 1) {
+    f = f * n;
+    n = n - 1;
+  }
+  return f;
+}
+
+function binom(a, b) {
+  var val = fact(a) / (fact(b) * fact(a-b));
+  return val;
+}
+
+function main() {
+  return binom(6,3);
+}
+</pre>
+<p>Test 9: A function call in the parameter of a function. This code should return 24.</p>
+<pre>function fact(n) {
+  var r = 1;
+  while (n &gt; 1) {
+    r = r * n;
+    n = n - 1;
+  }
+  return r;
+}
+
+function main() {
+  return fact(fact(3) - fact(2));
+}
+</pre>
+<p>Test 10: A function call that ignores the return value. This code should return 2.</p>
+<pre>var count = 0;
+
+function f(a,b) {
+  count = count + 1;
+  a = a + b;
+  return a;
+}
+
+function main() {
+  f(1, 2);
+  f(3, 4);
+  return count;
+}
+</pre>
+<p>Test 11: A function without a return statement. This code should return 35.</p>
+<pre>var x = 0;
+var y = 0;
+
+function setx(a) {
+  x = a;
+}
+
+function sety(b) {
+  y = b;
+}
+
+function main() {
+  setx(5);
+  sety(7);
+  return x * y;
+}
+</pre>
+<p>Test 12: Mismatched parameters and arguments. This code should give an error.</p>
+<pre>function f(a) {
+  return a*a;
+}
+
+function main() {
+  return f(10, 11, 12);
+}
+</pre>
+
+<p>Test 13: Functions inside functions.  This code should return 90.</p>
+<pre>
+function main() {
+  function h() {
+    return 10;
+  }
+
+  function g() {
+    return 100;
+  }
+
+  return g() - h();
+}</pre>
+
+<p>Test 14: Functions inside functions accessing variables outside.  This code should return 69.</p>
+<pre>
+function collatz(n) {
+  var counteven = 0;
+  var countodd = 0;
+
+  function evenstep(n) {
+    counteven = counteven + 1;
+    return n / 2;
+  }
+
+  function oddstep(n) {
+    countodd = countodd + 1;
+    return 3 * n + 1;
+  }
+
+  while (n != 1) {
+    if (n % 2 == 0)
+      n = evenstep(n);
+    else
+      n = oddstep(n);
+  }
+  return counteven + countodd;
+}
+
+
+function main() {
+  return collatz(111);
+}
+</pre>
+
+<p>Test 15: Functions inside functions with variables of the same name.  Thus code should return 87.</p>
+<pre>
+function f(n) {
+  var a;
+  var b;
+  var c;
+
+  a = 2 * n;
+  b = n - 10;
+
+  function g(x) {
+    var a;
+    a = x + 1;
+    b = 100;
+    return a;
+  }
+
+  if (b == 0)
+    c = g(a);
+  else
+    c = a / b;
+  return a + b + c;
+}
+
+function main() {
+  var x = f(10);
+  var y = f(20);
+
+  return x - y;
+}</pre>
+
+<p>Test 16: Functions inside functions inside functions.  This code should return 64.</p>
+<pre>
+function main() {
+  var result;
+  var base;
+
+  function getpow(a) {
+     var x;
+
+     function setanswer(n) {
+        result = n;
+     }
+
+     function recurse(m) {
+       if (m > 0) {
+         x = x * base;
+         recurse(m-1);
+       }
+       else
+         setanswer(x);
+     }
+
+     x = 1;
+     recurse(a);
+  }
+  base = 2;
+  getpow(6);
+  return result;
+}</pre>
+
+<p>Test 17: Functions inside functions accessing out of scope variables.  This code should return an error with b out of scope.</p>
+<pre>
+function f(x) {
+  function g(x) {
+    var b;
+    b = x;
+    return 0;
+  }
+
+  function h(x) {
+    b = x;
+    return 1;
+  }
+
+  return g(x) + h(x);
+}
+
+function main() {
+  return f(10);
+}</pre>
+
+<p>Test 18: try/catch finally, but no exception thrown.  This code should return 125.
+<pre>
+function divide(x, y) {
+  if (y == 0)
+    throw y;
+  return x / y;
+}
+
+function main() {
+  var x;
+
+  try {
+    x = divide(10, 5) * 10;
+    x = x + divide(5, 1);
+  }
+  catch(e) {
+    x = e;
+  }
+  finally {
+    x = x + 100;
+  }
+  return x;
+}
+</pre>
+</p>
+
+<p>Test 19: Throwing an exception inside a function.  This code should return 100.
+<pre>
+function divide(x, y) {
+  if (y == 0)
+    throw y;
+  return x / y;
+}
+
+function main() {
+  var x;
+
+  try {
+    x = divide(10, 5) * 10;
+    x = x + divide(5, 0);
+  }
+  catch(e) {
+    x = e;
+  }
+  finally {
+    x = x + 100;
+  }
+  return x;
+}
+</pre>
+</p>
+
+<p>Test 20: Throwing an exception from a function.  This code should return 2000400.
+<pre>
+function divide(x, y) {
+  if (y == 0)
+    throw 1000000;
+  return x / y;
+}
+
+ function main() {
+  var x = 0;
+  var j = 1;
+
+  try {
+    while (j >= 0) {
+    var i = 10;
+    while (i >= 0) {
+      try {
+        x = x + divide(10*i, i);
+      }
+      catch(e) {
+        x = x + divide(e, j);
+      }
+      i = i - 1;
+    }
+    j = j - 1;
+   }
+  }
+  catch (e2) {
+    x = x * 2;
+  }
+  return x;
+}
+</pre>
+</p>
+
+
+<h4>Additional Tests For Those Doing the Extra Challenge</h4>
+<p>Test 21: Call-by-reference test. This code should return 3421.</p>
+<pre>function swap1(x, y) {
+  var temp = x;
+  x = y;
+  y = temp;
+}
+
+function swap2(&amp;x, &amp;y) {
+  var temp = x;
+  x = y;
+  y = temp;
+}
+
+function main() {
+  var a = 1;
+  var b = 2;
+  swap1(a,b);
+  var c = 3;
+  var d = 4;
+  swap2(c,d);
+  return a + 10*b + 100*c + 1000*d;
+}
+</pre>
+<p>Test 22: Assignment side effects with function calls. This code should return 20332.</p>
+<pre>var x;
+
+function f(a,b) {
+  return a * 100 + b;
+}
+
+function fib(f) {
+  var last = 0;
+  var last1 = 1;
+
+  while (f &gt; 0) {
+    f = f - 1;
+    var temp = last1 + last;
+    last = last1;
+    last1 = temp;
+  }
+  return last;
+}
+
+function main() {
+  var y;
+  var z = f(x = fib(3), y = fib(4));
+  return z * 100 + y * 10 + x;
+}
+</pre>
+
+<p>Test 23: Mixture of call-by-value and call-by-reference.  This code should return 21.</p>
+<pre>
+function gcd(a, &amp;b) {
+  if (a < b) {
+    var temp = a;
+    a = b;
+    b = temp;
+  }
+  var r = a % b;
+  while (r != 0) {
+    a = b;
+    b = r;
+    r = a % b;
+  }
+  return b;
+}
+function main () {
+  var x = 14;
+  var y = 3 * x - 7;
+  gcd(x,y);
+  return x+y;
+}
+</pre>
+</body>
+</html>
