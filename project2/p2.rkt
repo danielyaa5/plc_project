@@ -372,5 +372,4 @@
 
 ;;; quicktest, commented out.
 ;;; tests 5, 11, 12, 13, 19 should throw an error
-(parser "test/test17.txt")
-(interpret (parser "test/test17.txt"))
+(interpret (parser "test/test2.txt"))
