@@ -4,11 +4,12 @@
 ; Note: We used the student sample solution to complete project 3.
 
 ; Load the parser
-(load "simpleParser.scm")
+; (load "simpleParser.scm") obsolete
+(load "functionParser.scm")
 
 (define interpret
-  (lambda (f)
-    (interpret_parsed (parser f) '((()) (())))))
+  (lambda (filename)
+    (M_state-functionCall '(funcall main) (interpret_parsed (parser filename) '((()) (()))))))
 
 (define interpret_parsed
   (lambda (statements state)
@@ -17,7 +18,22 @@
       ((atom? state) state)
       (else (M_state (firstStatement statements) state
                      (lambda (s) (interpret_parsed (remaining statements) s))
-                     baseBreak baseContinue baseThrow baseReturn)))))
+                     baseBreak
+                     baseContinue
+                     baseThrow
+                     baseReturn)))))
+
+
+;;; breakdown ;;;
+;;; breaks down a value (ie. true and false)
+;; @value the value to break down
+(define breakdown
+  (lambda (value)
+    (cond
+      ((and (not (number? value)) value)       "true" )
+      ((and (not (number? value)) (not value)) "false")
+      (else value)
+      )))
 
 (define baseBreak (lambda (s) (error 'error "Break outside of block")))
 
@@ -39,7 +55,8 @@
       ((number? expression) expression)
       ((eq? 'true expression) #t)
       ((eq? 'false expression) #f)
-      ((atom? expression) (lookup expression state)) 
+      ((atom? expression) (lookup expression state))
+
       ((member (operator expression) '(+ - * / %)) (M_value-arith expression state))
       ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state)))))
 
@@ -77,6 +94,8 @@
 
 (define operand2 caddr)
 
+(define operand3 cadddr)
+
 ;M_value-return will take a return statement and return the statement right of "return"
 (define M_value-return
   (lambda (expression state return)
@@ -99,6 +118,11 @@
   (lambda (statement state next break continue throw return)
     (cond
       ((null? (operation statement)) (error 'error "Empty statement."))
+      
+      ;; added for project 3 ;;
+      ((eq? (operator statement) 'function) (M_state-functionDeclare statement state))
+      ((eq? (operator statement) 'funcall) (M_state-functionCall statement state))
+      
       ((eq? 'var (operation statement)) (M_state-declare statement state next))
       ((eq? '= (operation statement)) (M_state-assign statement state next break continue throw return))
       ((eq? 'try (operation statement)) (M_state-try statement state next break continue throw return))
@@ -307,9 +331,10 @@
 (define M_state-declare
   (lambda (statement state next)
     (cond
-      ((not (eq? 'var (operation statement))) (error 'illegal "Declaration statment does not start with 'var'"))
+      ; ((eq? 'function (operation statement)) (update
+      ((not (eq? 'var (operation statement)) (error 'illegal "Declaration statment does not start with 'var'"))
       ((null? (declare-value-list statement)) (next (declare_var (declare-var-name statement) state)))
-      (else (next (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state) (lambda (v) v)))))))
+      (else (next (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state) (lambda (v) v))))))))
 
 (define declare-value-list cddr)
 
@@ -330,6 +355,44 @@
 
 (define assign-expression caddr)
 
+
+;;; project 3 ;;;
+
+; M_state-functionDeclare takes a statement (eg. "main() {...}")
+(define M_state-functionDeclare
+  (lambda (statement state)
+    (update_state_frame
+     (operand1 statement)
+     (cons (operand2 statement) (cons (operand3 statement) (cons (lambda() state) '())))
+     (declare_var (operand1 statement) state)
+     )))
+
+; M_state-functionCall calls a function (eg. "mean(1, 2, 3)")
+(define M_state-functionCall
+  (lambda (statement state)
+    (call/cc (lambda (return)
+      (interpret_function
+       (cadr (lookup (operand1 statement) state))
+       (set_formal_parameters
+        (cddr statement)
+        (car (lookup (operand1 statement) state))
+        state
+        ((caddr (lookup (operand1 statement) state))))
+       return)
+))))
+
+
+(define interpret_function (lambda (statement state return)
+    (popStack
+      (interpret_statement_list
+        statement
+        (pushStack state)
+        return
+        (lambda (v) (error "Illegal break"))
+        (lambda (v) (error "Illegal continue")))
+        )))
+
+
 ;;;;;;;;;;;;;;; State manipulation and management ;;;;;;;;;;;;;;;;;;;;;;;
 (define lookup
   (lambda (name state)
@@ -338,9 +401,11 @@
       ((empty?  (variables state)) (error 'error "Using variable before it is assigned."))
       ((empty?  (firstVariableFrame state)) (lookup name (cons (remaining_variables state) (list (remaining_values state)))))
       ((and (eq? name (first_variable state)) (eq? 'undefined (first_value state))) (error 'error "Using variable before it is assigned."))
-      ((eq? name (first_variable state)) (first_value state))
+      ((and (eq? name (first_variable state)) (atom? (first_value state))) (first_value state))
+      ;abstract this shit
+      ((eq? name (first_variable state)) (caadr state))
       (else (lookup name (cons (cons (rest_of_first_varframe state) (restOfVariableFrames state)) (list (cons (rest_of_first_valframe state) (restOfValueFrames state)))))))))
-              
+
 (define variables car)
 
 (define first_variable caaar)
@@ -398,8 +463,8 @@
   (lambda (name value state)
     (cond
       ((null? state) 'undefined)
-      ((null? (variableList state)) (error 'undefined "Attempting to assign an undeclared variable."))
-      ((eq? name (caar state)) (cons (variables state) (list (cons value (remaining_values state)))))
+      ((null? (variableList state)) (print state))
+      ((eq? name (caaar state)) (cons (variables state) (list (cons value (remaining_values state)))))
       (else ((lambda (newState)
                (cons (cons (caar state) (variables newState)) (list (cons (caadr state) (state_values newState)))))
              (update_state_frame name value (cons (remaining_variables state) (list (remaining_values state)))))))))
@@ -416,3 +481,33 @@
 (define firstFrameState
   (lambda (state)
     (cons (firstVariableFrame state) (list (firstValueFrame state)))))
+
+
+; sets the formal parameters of the environment to the values in the given parameters.
+(define set_formal_parameters
+  (lambda (parameters formals state functionState)
+    (cond
+      ((and (null? parameters) (null? formals))
+       state)
+      ((or  (null? parameters) (null? formals))
+       (error "Invalid number of arguments"))
+      ((or (null? (cdr parameters)) (null? (cdr formals)))
+       (assign
+        (car formals)
+        (M_value (car parameters) state)
+        (declare (car formals) funcenv)))
+      (else (assign
+        (car formals)
+        (M_value (car parameters) state)
+        (declare
+          (car formals)
+          (set_formal_parameters
+            (cdr parameters)
+            (cdr formals)
+            env
+            functionState))))
+      )))
+
+
+(parser "test/test1")
+(interpret "test/test1")
