@@ -9,7 +9,7 @@
 
 (define interpret
   (lambda (filename)
-    (M_state-functionCall '(funcall main) (interpret_parsed (parser filename) '((()) (()))))))
+    (M_state-functionCall '(funcall main) (interpret_parsed (parser filename) '((()) (()))) (lambda (s) (interpret_parsed '() s))  )))
 
 (define interpret_parsed
   (lambda (statements state)
@@ -121,7 +121,7 @@
       
       ;; added for project 3 ;;
       ((eq? (operator statement) 'function) (M_state-functionDeclare statement state))
-      ((eq? (operator statement) 'funcall) (M_state-functionCall statement state))
+      ((eq? (operator statement) 'funcall) (M_state-functionCall statement state next))
       
       ((eq? 'var (operation statement)) (M_state-declare statement state next))
       ((eq? '= (operation statement)) (M_state-assign statement state next break continue throw return))
@@ -138,6 +138,10 @@
 (define M_state-add-frame
   (lambda (state next)
     (next (cons (cons '() (variableList state)) (list (cons '() (valueList state)))))))
+
+(define M_state-add-frame-functions
+  (lambda (state)
+    (cons (cons '() (variableList state)) (list (cons '() (valueList state))))))
 
 (define M_state-pop-frame
   (lambda (state next)
@@ -332,9 +336,9 @@
   (lambda (statement state next)
     (cond
       ; ((eq? 'function (operation statement)) (update
-      ((not (eq? 'var (operation statement)) (error 'illegal "Declaration statment does not start with 'var'"))
+      ((not (eq? 'var (operation statement))) (error 'illegal "Declaration statment does not start with 'var'"))
       ((null? (declare-value-list statement)) (next (declare_var (declare-var-name statement) state)))
-      (else (next (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state) (lambda (v) v))))))))
+      (else (next (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state) (lambda (v) v)))))))
 
 (define declare-value-list cddr)
 
@@ -363,13 +367,13 @@
   (lambda (statement state)
     (update_state_frame
      (operand1 statement)
-     (cons (operand2 statement) (cons (operand3 statement) (cons (lambda() state) '())))
+     (cons (operand2 statement) (cons (operand3 statement) (cons (lambda () state) '())))
      (declare_var (operand1 statement) state)
      )))
 
 ; M_state-functionCall calls a function (eg. "mean(1, 2, 3)")
 (define M_state-functionCall
-  (lambda (statement state)
+  (lambda (statement state next)
     (call/cc (lambda (return)
       (interpret_function
        (cadr (lookup (operand1 statement) state))
@@ -378,20 +382,25 @@
         (car (lookup (operand1 statement) state))
         state
         ((caddr (lookup (operand1 statement) state))))
-       return)
+       next return)
 ))))
 
-
-(define interpret_function (lambda (statement state return)
-    (popStack
-      (interpret_statement_list
+(define interpret_function
+  (lambda (statement state next return)
+    (M_state-pop-frame
+      (interpret_parsed
         statement
-        (pushStack state)
-        return
-        (lambda (v) (error "Illegal break"))
-        (lambda (v) (error "Illegal continue")))
-        )))
+        (M_state-add-frame-functions state)
+        ))))
 
+(define assign_value
+  (lambda (name value state)
+    (cond
+      ((null? state) #f)
+      ((contains? value (unbox state)) (set-box! (lookup name state) value))
+      (else (error "undeclared variable: " name)))
+    state
+    ))
 
 ;;;;;;;;;;;;;;; State manipulation and management ;;;;;;;;;;;;;;;;;;;;;;;
 (define lookup
@@ -468,6 +477,8 @@
       (else ((lambda (newState)
                (cons (cons (caar state) (variables newState)) (list (cons (caadr state) (state_values newState)))))
              (update_state_frame name value (cons (remaining_variables state) (list (remaining_values state)))))))))
+
+
 
 (define update_state
   (lambda (name value state return)
