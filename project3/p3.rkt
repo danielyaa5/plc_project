@@ -391,7 +391,7 @@
       (interpret_parsed
         statement
         (M_state-add-frame-functions state)
-        ))))
+        ) next)))
 
 (define assign_value
   (lambda (name value state)
@@ -473,6 +473,7 @@
     (cond
       ((null? state) 'undefined)
       ((null? (variableList state)) (print state))
+      ((eq? name (caar state)) (cons (variables state) (list (cons value (remaining_values state)))))
       ((eq? name (caaar state)) (cons (variables state) (list (cons value (remaining_values state)))))
       (else ((lambda (newState)
                (cons (cons (caar state) (variables newState)) (list (cons (caadr state) (state_values newState)))))
