@@ -145,7 +145,9 @@
 
 (define M_state-pop-frame
   (lambda (state next)
-    (next (cons (restOfVariableFrames state) (list (restOfValueFrames state))))))
+    (cond
+      ((atom? state) state)
+      (else (next (cons (restOfVariableFrames state) (list (restOfValueFrames state))))))))
 
 (define M_state-begin
   (lambda (statement state next break continue throw return)
@@ -521,5 +523,5 @@
       )))
 
 
-(parser "test/test1")
-(interpret "test/test1")
+(parser "test/test2")
+(interpret "test/test2")
