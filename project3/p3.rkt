@@ -1,527 +1,562 @@
-; Hun Jae Lee, Daniel Yakobian, Justin Wang
-; EECS345 Programming Language Concepts, Project 3
-
-; Note: We used the student sample solution to complete project 3.
+;;; Hun Jae Lee, Daniel Yakobian, Justin Wang
+;;; EECS345 Programming Language Concepts, Project 3
+;;; Due Mar 30, 2016 @ Midnight
 
 ; Load the parser
 ; (load "simpleParser.scm") obsolete
 (load "functionParser.scm")
 
+; (define call/cc call-with-current-continuation)
+
+;;; interpret ;;;
+;; interprets the given file.
+;; @filename the name of the file to interpret
 (define interpret
   (lambda (filename)
-    (M_state-functionCall '(funcall main) (interpret_parsed (parser filename) '((()) (()))) (lambda (s) (interpret_parsed '() s))  )))
+    (interpret-func-call 'main '() (interpret-global-statement-list (parser filename) newstate))))
 
-(define interpret_parsed
-  (lambda (statements state)
+;;; interpret-global-statement-list ;;;
+;; interprets global statements
+;; @parsetree the parsed tree from parser
+;; @state the state
+(define interpret-global-statement-list
+  (lambda (parsetree state)
     (cond
-      ((null? statements) state)
-      ((atom? state) state)
-      (else (M_state (firstStatement statements) state
-                     (lambda (s) (interpret_parsed (remaining statements) s))
-                     baseBreak
-                     baseContinue
-                     baseThrow
-                     baseReturn)))))
-
-
-;;; breakdown ;;;
-;;; breaks down a value (ie. true and false)
-;; @value the value to break down
-(define breakdown
-  (lambda (value)
-    (cond
-      ((and (not (number? value)) value)       "true" )
-      ((and (not (number? value)) (not value)) "false")
-      (else value)
-      )))
-
-(define baseBreak (lambda (s) (error 'error "Break outside of block")))
-
-(define baseContinue (lambda (s) (error 'error "Continue outside of block")))
-
-(define baseThrow (lambda (v s) (error 'error "Throw outside of try block")))
-
-(define baseReturn (lambda (v s) v))
-
-(define remaining cdr)
-
-(define firstStatement car)
-
-;;;;;;;;;;;;;;;;; M_value functions ;;;;;;;;;;;;;;;;;;
-(define M_value
-  (lambda (expression state)
-    (cond
-      ((null? expression) '())
-      ((number? expression) expression)
-      ((eq? 'true expression) #t)
-      ((eq? 'false expression) #f)
-      ((atom? expression) (lookup expression state))
-
-      ((member (operator expression) '(+ - * / %)) (M_value-arith expression state))
-      ((member (operator expression) '(&& || ! < > <= >= == !=)) (M_value-boolean expression state)))))
-
-(define M_value-arith
-  (lambda (expression state)
-    (cond
-      ((eq? '+ (operator expression)) (+ (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-      ((eq? '- (operator expression)) (if (not (null? (cddr expression)))
-                                            (- (M_value (operand1 expression) state) (M_value (operand2 expression) state))
-                                            (- 0 (M_value (operand1 expression) state))))
-      ((eq? '* (operator expression)) (* (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-      ((eq? '/ (operator expression)) (quotient (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-      ((eq? '% (operator expression)) (remainder (M_value (operand1 expression) state) (M_value (operand2 expression) state)))            
-      (else (error 'unknown "unknown expression")))))
-
-(define M_value-boolean
-  (lambda (expression state)
-      (cond
-        ((eq? 'true expression) #t)
-        ((eq? 'false expression) #f)
-        ((eq? '&& (operator expression)) (and (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-        ((eq? '|| (operator expression)) (or (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-        ((eq? '! (operator expression)) (not (M_value (operand1 expression) state))) 
-        ((eq? '< (operator expression)) (< (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-        ((eq? '> (operator expression)) (> (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-        ((eq? '<= (operator expression)) (<= (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-        ((eq? '>= (operator expression)) (>= (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-        ((eq? '== (operator expression)) (eq? (M_value (operand1 expression) state) (M_value (operand2 expression) state)))
-        ((eq? '!= (operator expression)) (not (eq? (M_value (operand1 expression) state) (M_value (operand2 expression) state))))
-        (else (error 'unknown "unknown expression")))))
-
-(define operator car)
-
-(define operand1 cadr)
-
-(define operand2 caddr)
-
-(define operand3 cadddr)
-
-;M_value-return will take a return statement and return the statement right of "return"
-(define M_value-return
-  (lambda (expression state return)
-    (return (convert_value (M_value (evaluatable expression) state)) state)))
-
-(define evaluatable cadr)
-
-; converts #t or #f to true and false respectively
-(define convert_value
-  (lambda (v)
-    (cond
-      ((null? v) '())
-      ((eq? v #t) 'true)
-      ((eq? v #f) 'false)
-      (else v))))
-
-;;;;;;;;;;;;;;;;;;;;;;; M_state section ;;;;;;;;;;;;;;;;;;
-; lamnda (statement state return break continue throw)
-(define M_state
-  (lambda (statement state next break continue throw return)
-    (cond
-      ((null? (operation statement)) (error 'error "Empty statement."))
-      
-      ;; added for project 3 ;;
-      ((eq? (operator statement) 'function) (M_state-functionDeclare statement state))
-      ((eq? (operator statement) 'funcall) (M_state-functionCall statement state next))
-      
-      ((eq? 'var (operation statement)) (M_state-declare statement state next))
-      ((eq? '= (operation statement)) (M_state-assign statement state next break continue throw return))
-      ((eq? 'try (operation statement)) (M_state-try statement state next break continue throw return))
-      ((eq? 'begin (operation statement)) (M_state-begin statement state next break continue throw return))
-      ((eq? 'throw (operation statement)) (M_state-throw statement state throw))
-      ((eq? 'break (operation statement)) (M_state-break statement state break))
-      ((eq? 'continue (operation statement)) (M_state-continue statement state continue))
-      ((eq? 'return (operation statement)) (M_value-return statement state return))
-      ((eq? 'if (operation statement)) (M_state-if statement state next break continue throw return))
-      ((eq? 'while (operation statement)) (M_state-while statement state next break continue throw return))
-      (else (error 'error "Unrecognized statement type.")))))
-
-(define M_state-add-frame
-  (lambda (state next)
-    (next (cons (cons '() (variableList state)) (list (cons '() (valueList state)))))))
-
-(define M_state-add-frame-functions
-  (lambda (state)
-    (cons (cons '() (variableList state)) (list (cons '() (valueList state))))))
-
-(define M_state-pop-frame
-  (lambda (state next)
-    (cond
-      ((atom? state) state)
-      (else (next (cons (restOfVariableFrames state) (list (restOfValueFrames state))))))))
-
-(define M_state-begin
-  (lambda (statement state next break continue throw return)
-    (cond
-      ((not (eq? (car statement) 'begin)) (error 'error "Begin block without 'begin' at the beginning."))
-      (else (M_state-add-frame state (lambda (st) (M_state-block (cdr statement) st
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))))))
-
-(define M_state-block
-  (lambda (statements state next break continue throw return)
-    (cond
-      ((null? statements) (next state))
-      (else (M_state (firstStatement statements) state
-                     (lambda (s) (M_state-block (remaining statements) s next break continue throw return))
-                     break continue throw return)))))
-
-(define M_state-throw
-  (lambda (statement state throw)
-    (throw (M_value (throwVar statement) state) state)))
-
-(define M_state-break
-  (lambda (statement state break)
-    (break state)))
-
-(define M_state-continue
-  (lambda (statement state continue)
-    (continue state)))
-
-(define throwVar cadr)
-
-(define M_state-try
-  (lambda (statement state next break continue throw return)
-    (cond
-      ((null? (finallyBlock statement))
-        (M_state-add-frame state (lambda (st) (M_state-try-catch (tryBlock statement) (catchBlock statement) st
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2))))))))
-      ((null? (catchList statement))
-       (M_state-add-frame state (lambda (st) (M_state-try-finally (tryBlock statement) (finallyStatements statement) st
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
-                                                                 (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                                                 (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))) 
-      (else
-        (M_state-add-frame state (lambda (st) (M_state-try-catch-finally
-                                               (tryBlock statement) (catchBlock statement) (finallyStatements statement) st
-                                               (lambda (s) (M_state-pop-frame s (lambda (s2) (next s2))))
-                                               (lambda (s) (M_state-pop-frame s (lambda (s2) (break s2))))
-                                               (lambda (s) (M_state-pop-frame s (lambda (s2) (continue s2))))
-                                               (lambda (v s) (M_state-pop-frame s (lambda (s2) (throw v s2))))
-                                               (lambda (v s) (M_state-pop-frame s (lambda (s2) (return v s2)))))))))))
-
-(define catchList caddr)
-
-(define tryBlock cadr)
-
-(define catchBlock cdaddr)
-
-(define finallyStatements
-  (lambda (statement)
-    (cadr (cadddr statement))))
-
-(define finallyBlock cadddr)
-
-(define M_state-try-catch
-  (lambda (try catch state next break continue throw return)
-    (M_state-block try state next break continue
-                   (lambda (v s) (M_state-catch catch v s next break continue throw return)) return)))
-
-(define M_state-catch
-  (lambda (catch value state next break continue throw return)
-    (cond
-      ((null? value) (error 'error "Null value was thrown."))
-      (else (M_state-pop-frame state
-                               (lambda (st) (M_state-add-frame st
-                                                               (lambda (s) (M_state-declare (buildDeclare (varName catch) value) s
-                                                                                            (lambda (s2) (M_state-block (catchStatements catch) s2 next break continue throw return)))))))))))
-
-(define catchStatements cadr)
-      
-
-(define buildDeclare
-  (lambda (name value)
-    (cons 'var (cons name (list value)))))
-
-(define varName caar)
-
-(define M_state-try-catch-finally
-  (lambda (try catch finally state next break continue throw return)
-    (M_state-block try state
-                   (lambda (s) (finally-next-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-break-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v s) (finally-catch-throw-continuation catch v finally s next break continue throw return))
-                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
-
-(define M_state-try-finally
-  (lambda (try finally state next break continue throw return)
-    (M_state-block try state
-                   (lambda (s) (finally-next-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-break-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v s) (finally-throw-continuation finally s v next break continue throw return))
-                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
-
-(define M_state-finally
-  (lambda (statements state next break continue throw return)
-    (M_state-pop-frame state
-                       (lambda (st) (M_state-add-frame st
-                                                       (lambda (s) (M_state-block statements s next break continue throw return)))))))
-
-(define finally-next-continuation
-  (lambda (finally state next break continue throw return)
-    (M_state-finally finally state (lambda (s) (next s)) break continue throw return)))
-               
-(define finally-break-continuation
-  (lambda (finally state next break continue throw return)
-    (M_state-finally finally state (lambda (s) (break s)) break continue throw return)))
-
-(define finally-continue-continuation
-  (lambda (finally state next break continue throw return)
-    (M_state-finally finally state (lambda (s) (continue s)) break continue throw return)))
-
-(define finally-throw-continuation
-  (lambda (finally state value next break continue throw return)
-    (M_state-finally finally state (lambda (s) (throw value s)) break continue throw return)))
-
-(define finally-catch-throw-continuation
-  (lambda (catch value finally state next break continue throw return)
-    (M_state-catch catch value state
-                   (lambda (s) (finally-next-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-break-continuation finally s next break continue throw return))
-                   (lambda (s) (finally-continue-continuation finally s next break continue throw return))
-                   (lambda (v s) (M_state-finally finally s (lambda (s2) (throw v s2)) break continue throw return))
-                   (lambda (v s) (finally-return-continuation finally s v next break continue throw return)))))
-
-(define finally-return-continuation
-  (lambda (finally state value next break continue throw return)
-    (M_state-finally finally state (lambda (s) (return v s)) break continue throw return)))
-
-(define M_state-while
-  (lambda (statement state next break continue throw return)
-    (if (M_value-boolean (GetCondition statement) state)
-        (M_state (GetStatement statement) state
-                 (lambda (s) (M_state-while statement s next break continue throw return))
-                 (lambda (s) (next s))
-                 (lambda (s) (M_state-while statement s next break continue throw return))
-                 throw
-                 return)
-        (next state))))
-
-(define GetStatement caddr)
-
-(define M_state-if
-  (lambda (statement state next break continue throw return)
-    (cond
-      ((M_value (GetCondition statement) state) (M_state (GetThenStatement statement) state next break continue throw return))
-      ((not (null? (GetOptElse statement))) (M_state (GetOptElse statement) state next break continue throw return))
-      (else (next state)))))
-
-;Helper for if statement to get the first condition
-(define GetCondition cadr)
-
-;Helper for if statment to get the "then" statement
-(define GetThenStatement caddr)
-
-;Helper for if statement to get the optional else statement
-(define GetOptElse
-  (lambda (l)
-    (if (null? (afterIfBlock l))
-        '()
-        (elseStatements l))))
-
-(define afterIfBlock cdddr)
-
-(define elseStatements cadddr)
-
-;M_declare_statement will take a list starting with 'var followed by an atom with an optional value
-(define M_state-declare
-  (lambda (statement state next)
-    (cond
-      ; ((eq? 'function (operation statement)) (update
-      ((not (eq? 'var (operation statement))) (error 'illegal "Declaration statment does not start with 'var'"))
-      ((null? (declare-value-list statement)) (next (declare_var (declare-var-name statement) state)))
-      (else (next (update_state (declare-var-name statement) (M_value (declare-val statement) state) (declare_var (declare-var-name statement) state) (lambda (v) v)))))))
-
-(define declare-value-list cddr)
-
-(define declare-val caddr)
-
-(define declare-var-name cadr)
-
-; M_assign takes a statement and state and updates the state with the desired variable assignment.
-(define M_state-assign
-  (lambda (statement state next break continue throw return)
-    (cond
-      ((not (eq? '= (operation statement))) (error 'illegal "Assignment statement does not start with '='"))
-      (else (next (update_state (assign-var statement) (M_value (assign-expression statement) state) state (lambda (v) v)))))))
-
-(define operation car)
-
-(define assign-var cadr)
-
-(define assign-expression caddr)
-
-
-;;; project 3 ;;;
-
-; M_state-functionDeclare takes a statement (eg. "main() {...}")
-(define M_state-functionDeclare
+     ((null? parsetree) state)
+     (else (interpret-global-statement-list (cdr parsetree) (interpret-global-statement (car parsetree) state))))))
+
+;;; interpret-global-statement ;;;
+;; interprets one global statement
+;; @param statement the statement to interpret
+;; @state the state
+(define interpret-global-statement
   (lambda (statement state)
-    (update_state_frame
-     (operand1 statement)
-     (cons (operand2 statement) (cons (operand3 statement) (cons (lambda () state) '())))
-     (declare_var (operand1 statement) state)
-     )))
-
-; M_state-functionCall calls a function (eg. "mean(1, 2, 3)")
-(define M_state-functionCall
-  (lambda (statement state next)
-    (call/cc (lambda (return)
-      (interpret_function
-       (cadr (lookup (operand1 statement) state))
-       (set_formal_parameters
-        (cddr statement)
-        (car (lookup (operand1 statement) state))
-        state
-        ((caddr (lookup (operand1 statement) state))))
-       next return)
-))))
-
-(define interpret_function
-  (lambda (statement state next return)
-    (M_state-pop-frame
-      (interpret_parsed
-        statement
-        (M_state-add-frame-functions state)
-        ) next)))
-
-(define assign_value
-  (lambda (name value state)
     (cond
-      ((null? state) #f)
-      ((contains? value (unbox state)) (set-box! (lookup name state) value))
-      (else (error "undeclared variable: " name)))
-    state
-    ))
+     ((eq? 'function (car statement)) (interpret-func-declare statement state))
+     (else (interpret-statement statement state undef-return undef-break undef-continue undef-throw)))))
 
-;;;;;;;;;;;;;;; State manipulation and management ;;;;;;;;;;;;;;;;;;;;;;;
-(define lookup
-  (lambda (name state)
+;;; interpret-func-declare ;;;
+;; interprets function declaration
+;; @statement the statement that declares a function
+;; @state the state
+(define interpret-func-declare
+  (lambda (statement state)
+    (state-bind (cadr statement) (cddr statement) state)))
+
+;;; interpret-statement-list ;;;
+;; interprets a list of statements
+;; @parsetree the parsed tree from the parser
+;; @state the state
+;; @return what to return
+;; @break what to break
+;; @continue what to continue
+;; @throw what to throw
+(define interpret-statement-list
+  (lambda (parsetree state return break continue throw)
     (cond
-      ((null? state) 'undefined)
-      ((empty?  (variables state)) (error 'error "Using variable before it is assigned."))
-      ((empty?  (firstVariableFrame state)) (lookup name (cons (remaining_variables state) (list (remaining_values state)))))
-      ((and (eq? name (first_variable state)) (eq? 'undefined (first_value state))) (error 'error "Using variable before it is assigned."))
-      ((and (eq? name (first_variable state)) (atom? (first_value state))) (first_value state))
-      ;abstract this shit
-      ((eq? name (first_variable state)) (caadr state))
-      (else (lookup name (cons (cons (rest_of_first_varframe state) (restOfVariableFrames state)) (list (cons (rest_of_first_valframe state) (restOfValueFrames state)))))))))
+     ((null? parsetree) state)
+     (else (interpret-statement-list (cdr parsetree) 
+        (interpret-statement (car parsetree) state return break continue throw)
+        return break continue throw)))))
 
-(define variables car)
-
-(define first_variable caaar)
-
-(define remaining_variables cdar)
-
-(define state_values cadr)
-
-(define first_value caaadr)
-
-(define remaining_values cdadr)
-
-(define rest_of_first_varframe cdaar)
-
-(define rest_of_first_valframe cdaadr)
-
-(define atom?
-  (lambda (expression)
-    (not (or (pair? expression) (null? expression)))))
-
-; declare_var adds a new variable to the state with 'undefined as its initial value
-(define declare_var
-  (lambda (name state)
+;;; interpret-func-call ;;;
+;; interprets a function call (funcall)
+;; @func-name the name of the called function
+;; @values the values (parameters) fed into the function
+;; @state the state
+(define interpret-func-call
+  (lambda (func-name values state)
     (cond
-      ((null? state) 'undefined)
-      ((contains? name (variableList state)) (error 'error "Duplicate delcaration of variable."))
-      (else (cons (cons (cons name (firstVariableFrame state)) (restOfVariableFrames state)) (list (cons (cons 'undefined (firstValueFrame state)) (restOfValueFrames state))))))))
+     ;test if args === params list
+     ((eq? #f (hasCorrectArgs (car (state-lookup func-name state)) values)) error "Incorrect arguments supplied")
+     ((eq? 'void (state-lookup 'return (return-state func-name values state))) (state-pop-frame (return-state func-name values state)))
+     (else (state-lookup 'return (return-state func-name values state))))))
 
-(define contains?
-  (lambda (v l)
+;;; hasCorrectArgs ;;;
+;; checks whether two args are equivalueent.
+;; @l1 the list to compare
+;; @l2 the list to compare
+(define hasCorrectArgs
+  (lambda (l1 l2)
     (cond
-      ((null? l) #f)
-      ((eq? v (frontOfList l)) #t)
-      ((list? (frontOfList l)) (or (contains? v (frontOfList l)) (contains? v (restOfList l))))
-      (else (contains? v (restOfList l))))))
+      ((and (null? l1) (null? l2)) #t)
+      ((null? l1) #f)
+      ((null? l2) #f)
+      (else (hasCorrectArgs (cdr l1) (cdr l2))))))
+  
+;;; return-state ;;;
+;; returns the state after a function
+;; @func-name the name of the function
+;; @values the parameters fed into the function
+;; @state the state
+(define return-state
+  (lambda (func-name values state)
+    (call/cc
+     (lambda (return)
+       (interpret-statement-list (cadr (state-lookup func-name state))
+          (create-func-state (car (state-lookup func-name state)) (interpret-called-values values state) state)
+          return undef-break undef-continue undef-throw)))))
 
-(define frontOfList car)
-
-(define restOfList cdr)
-
-(define variableList car)
-
-(define valueList cadr)
-
-(define firstVariableFrame caar)
-
-(define restOfVariableFrames cdar)
-
-(define firstValueFrame caadr)
-
-(define restOfValueFrames cdadr)
-
-; update_state takes a name and a value and updates that name with the value if it exists in the state
-(define update_state_frame
-  (lambda (name value state)
+;;; interpret-called-values ;;;
+;; returns the called value
+;; @values the list of values
+;; @state the state
+(define interpret-called-values
+  (lambda (values state)
     (cond
-      ((null? state) 'undefined)
-      ((null? (variableList state)) (print state))
-      ((eq? name (caar state)) (cons (variables state) (list (cons value (remaining_values state)))))
-      ((eq? name (caaar state)) (cons (variables state) (list (cons value (remaining_values state)))))
-      (else ((lambda (newState)
-               (cons (cons (caar state) (variables newState)) (list (cons (caadr state) (state_values newState)))))
-             (update_state_frame name value (cons (remaining_variables state) (list (remaining_values state)))))))))
+     ((null? values) '())
+     (else (cons (interpret-value (car values) state) (interpret-called-values (cdr values) state))))))
 
-
-
-(define update_state
-  (lambda (name value state return)
+;;; interpret-statement ;;;
+;; interprets a statement.
+;; @statement the statement to be interpreted
+;; @state the state
+;; @return what to return
+;; @break what to break
+;; @continue what to continue
+;; @throw what to throw
+(define interpret-statement
+  (lambda (statement state return break continue throw)
     (cond
-      ((null? state) (error 'undefined "Attempting to assign an undeclared variable."))
-      ((null? (variableList state)) (error 'undefined "Attempting to assign an undeclared variable."))
-      ((contains? name (firstVariableFrame state)) (return (cons (variableList state)
-                                                           (list (cons (valueList (update_state_frame name value (firstFrameState state))) (restOfValueFrames state))))))
-      (else (update_state name value (cons (restOfVariableFrames state) (list (restOfValueFrames state))) (lambda (s) (return (cons (cons (firstVariableFrame state) (variableList s)) (list (cons (firstValueFrame state) (valueList s)))))))))))
+     ((eq? '= (car statement))        (interpret-assign    statement state                       throw))
+     ((eq? 'var (car statement))      (interpret-variable  statement state))
+     ((eq? 'if (car statement))       (interpret-if        statement state return break continue throw))
+     ((eq? 'while (car statement))    (interpret-while     statement state return                throw))
+     ((eq? 'break (car statement))    (break                         state))
+     ((eq? 'continue (car statement)) (continue                      state))
+     ((eq? 'begin (car statement))    (interpret-begin     statement state return break continue throw))
+     ((eq? 'try (car statement))      (interpret-try (cadr statement) (caddr statement) (cadddr statement)
+                                                                     state return continue break throw))
+     ((eq? 'return (car statement))   (return (interpret-return statement state)))
+     ((eq? 'funcall (car statement))  (other-func-call (cadr statement) (cddr statement) state))
+     ((eq? 'function (car statement)) (interpret-func-declare statement state))
+     (else (error "Error: Not a valueid statement")))))
 
-(define firstFrameState
-  (lambda (state)
-    (cons (firstVariableFrame state) (list (firstValueFrame state)))))
 
-
-; sets the formal parameters of the environment to the values in the given parameters.
-(define set_formal_parameters
-  (lambda (parameters formals state functionState)
+(define other-func-call
+  (lambda (func-name values state)
     (cond
-      ((and (null? parameters) (null? formals))
-       state)
-      ((or  (null? parameters) (null? formals))
-       (error "Invalid number of arguments"))
-      ((or (null? (cdr parameters)) (null? (cdr formals)))
-       (assign
-        (car formals)
-        (M_value (car parameters) state)
-        (declare (car formals) funcenv)))
-      (else (assign
-        (car formals)
-        (M_value (car parameters) state)
-        (declare
-          (car formals)
-          (set_formal_parameters
-            (cdr parameters)
-            (cdr formals)
-            env
-            functionState))))
+     ((eq? #f (hasCorrectArgs (car (state-lookup func-name state)) values)) error "Incorrect arguments supplied")
+     ((eq? 'void (state-lookup 'return (return-state func-name values state))) (state-pop-frame (return-state func-name values state)))
+     (else (return-state func-name values state)))))
+
+;;; interpret-sideEffects ;;;
+;; interprets a statement, and prevent side effects.
+;; @statement the statement to be interpreted
+;; @state the state
+(define interpret-sideEffects
+  (lambda (statement state)
+    (cond
+     ((number? statement) state)
+     ((atom? statement) state)
+     ((eq? '! (car statement)) (interpret-sideEffects (LHS statement) state))
+     ((and (eq? '- (car statement)) (eq? 2 (length statement))) (interpret-sideEffects (LHS statement) state))
+     ((member? (car statement) '(+ - * / % == != > >= < <= && ||)) 
+      (interpret-sideEffects (RHS statement) (interpret-sideEffects (LHS statement) state)))
+     ((eq? 'begin (car statement)) state)
+     ((eq? 'break (car statement)) state)
+     ((eq? 'funcall (car statement)) state)
+     (else (interpret-statement statement state undef-return undef-break undef-continue)))))
+
+;;; interpret-begin ;;;
+;; interprets a block
+;; @statement the statement to be interpreted.
+;; @state the state
+;; @return what to return
+;; @break what to break
+;; @continue what to continue
+;; @throw what to throw
+(define interpret-begin
+  (lambda (statement state return break continue throw)
+    (let ((pop-break (lambda (break-state) (break (state-pop-frame break-state))))
+    (pop-continue (lambda (continue-state) (continue (state-pop-frame continue-state)))))
+      (state-pop-frame (interpret-statement-list (cdr statement) (state-push-frame state) return pop-break pop-continue throw)))))
+
+;;; interpret-while ;;;
+;; interprets a while statement
+;; @statement the statement to be interpreted.
+;; @state the state
+;; @return what to return
+;; @throw what to throw
+(define interpret-while
+  (lambda (statement state return throw)
+    (call/cc (lambda (break)
+         (letrec ((loop (lambda (condition body state)
+        (cond
+         ((eq? (interpret-value condition state) 'true) 
+          (loop condition body (call/cc (lambda (continue)
+                  (interpret-statement body (interpret-sideEffects condition state) return break continue throw)))))
+         (else (interpret-sideEffects condition state))))))
+     (loop (cadr statement) (caddr statement) state))))))
+
+;;; interpret-assign ;;;
+;; interprets an assignment statement
+;; @statement assign statement
+;; @state the state
+;; @throw what to throw
+(define interpret-assign
+  (lambda (statement state throw)
+    (state-update (LHS statement) (interpret-value (RHS statement) state) (interpret-sideEffects (RHS statement) state))))
+  
+;;; interpret-variable ;;;
+;; sets a new variable
+;; @statement variable statement
+;; @state the state
+(define interpret-variable
+  (lambda (statement state)
+    (cond
+     ((in-frame? (LHS statement) (top-frame state)) (error "Error: Cant redeclare variableiables"))
+     ((null? (cddr statement)) (state-bind (LHS statement) 'NEWVAR state))
+     (else (state-bind (LHS statement) (interpret-value (RHS statement) state) (interpret-sideEffects (RHS statement) state))))))
+  
+;;; interpret-return ;;;
+;; interprets the return statement
+;; @statement the return statement
+;; @state the state
+(define interpret-return
+  (lambda (statement state)
+    (cond
+     ((and (pair? (cadr statement)) (eq? 'funcall (caadr statement))) (state-bind 'return (interpret-func-call (cadadr statement) (cddadr statement) state) state))
+    (else (state-bind 'return (interpret-value (LHS statement) state) (interpret-sideEffects (LHS statement) state))))))
+
+;;; interpret-if ;;;
+;; interprets an if-statement
+;; @statement the if-statement
+;; @state the state
+;; @return what to return
+;; @break what to break
+;; @continue what to continue
+;; @throw what to throw
+(define interpret-if
+  (lambda (statement state return break continue throw)
+    (cond
+     ((eq? (interpret-value (cadr statement) state) 'true) 
+      (interpret-statement (caddr statement) (interpret-sideEffects (cadr statement) state) return break continue throw))
+     ((interpret-else? statement) 
+      (interpret-statement (cadddr statement) (interpret-sideEffects (cadr statement) state) return break continue throw))
+     (else state))))
+     
+;;; interpret-else? ;;;
+;; interprets the optional else statement
+;; @statement the list of optional else statement
+(define interpret-else?
+  (lambda (statement)
+    (cond
+     ((null? (cdddr statement)) #f)
+     (else #t))))
+
+;;; interpret-try ;;;
+;; interprets the try-body.
+;; @tryBody the body of the try statement
+;; @catch the catch-body of the statement
+;; @finally the finally-body of the statement
+;; @state the state
+;; @return what to return
+;; @break what to break
+;; @continue what to continue
+;; @throw what to throw
+(define interpret-try
+  (lambda (tryBody catch finally state return break continue throw)
+    (cond
+      ((null? tryBody) (interpret-statement-list (car (cdr finally)) state return break continue throw))
+      ((eq? 'throw (car (car tryBody))) (interpret-catch (caddr catch) finally (caadr catch) (interpret-value (cdar tryBody) state) state return break continue throw))
+      (else (interpret-try (cdr tryBody) catch finally (interpret-statement (car tryBody) state return break continue throw) return break continue throw))
       )))
 
+;;; interpret-catch ;;;
+;; interprets the catch-body.
+;; @catchBody the body of the catch statement
+;; @finally the finally-body of the statement
+;; @nameOfException the name of the exception
+;; @e the exception
+;; @state the state
+;; @return what to return
+;; @break what to break
+;; @continue what to continue
+;; @throw what to throw
+(define interpret-catch
+  (lambda (catchBody finally nameOfException e state return break continue throw)
+    (cond
+      ((not (null? e)) (interpret-catch catchBody finally nameOfException null (assign nameOfException e state) return break continue throw))
+      ((null? catchBody) (interpret_statements (cadr finally) state return break continue))
+      (else (interpret-catch (cdr catchBody) finally nameOfException null (interpret-statement (car catchBody) state return break continue) return break continue throw))
+      )))
 
-(parser "test/test2")
-(interpret "test/test2")
+;;; interpret-value ;;;
+;; interprets the value
+;; @statement the statement that calls this value.
+;; @state the state.
+(define interpret-value
+  (lambda (statement state)
+    (cond
+     ((null? statement) '())
+     ((number? statement) statement)
+     ((eq? statement 'true) 'true)
+     ((eq? statement 'false) 'false)
+     ((atom? statement) (state-lookup statement state))
+     ((eq? 'funcall (operator statement)) (interpret-func-call (cadr statement) (cddr statement) state))
+     ((eq? '= (operator statement)) (interpret-value (car (cddr statement)) state))
+     ((eq? '+ (operator statement)) ((interpret-binary +)         statement state))
+     ((eq? '- (operator statement)) ((interpret-negative -)       statement state))
+     ((eq? '* (operator statement)) ((interpret-binary *)         statement state))
+     ((eq? '/ (operator statement)) ((interpret-binary quotient)  statement state))
+     ((eq? '% (operator statement)) ((interpret-binary remainder) statement state))
+     ((eq? '> (operator statement)) ((interpret-boolean >)        statement state))
+     ((eq? '< (operator statement)) ((interpret-boolean <)        statement state))
+     ((eq? '>= (operator statement)) ((interpret-boolean >=)      statement state))
+     ((eq? '<= (operator statement)) ((interpret-boolean <=)      statement state))
+     ((eq? '!= (operator statement)) ((interpret-boolean (lambda (a b) (not (eq? a b)))) statement state))
+     ((eq? '== (operator statement)) ((interpret-boolean (lambda (a b) (eq? a b))) statement state))
+     ((eq? '|| (operator statement)) ((interpret-boolean (lambda (a b)
+                  (cond
+                   ((and (eq? a 'true) (eq? b 'true)) #t)
+                   ((and (eq? a 'true) (eq? b 'false)) #t)
+                   ((and (eq? a 'false) (eq? b 'true)) #t)
+                   ((and (eq? a 'false) (eq? b 'false)) #f))))
+         statement state))
+     ((eq? '&& (operator statement)) ((interpret-boolean (lambda (a b)
+                   (cond
+                   ((and (eq? a 'true) (eq? b 'true)) #t)
+                   ((and (eq? a 'true) (eq? b 'false)) #f)
+                   ((and (eq? a 'false) (eq? b 'true)) #f)
+                   ((and (eq? a 'false) (eq? b 'false)) #f))))
+         statement state))
+     ((eq? '! (operator statement)) ((interpret-unary-boolean (lambda (a) (cond ((eq? a 'true) #f)
+                     ((eq? a 'false) #t))))
+        statement state))
+     (else (error "Invalueid expressionession")))))
+
+;;; interpret-unary-boolean ;;;
+;; interprets the unary boolean (!true)
+;; @op the operator
+(define interpret-unary-boolean
+  (lambda (op)
+    (lambda (statement state)
+      (cond
+       ((op (interpret-value (operand1 statement) state)) 'true)
+       (else 'false)))))
+
+;;; interpret-boolean ;;;
+;; interprets a boolean statement
+;; @op the boolean operator
+(define interpret-boolean
+  (lambda (op)
+    (lambda (statement state)
+      (cond
+       ((op (interpret-value (operand1 statement) state) (interpret-value (operand2 statement) (interpret-sideEffects (operand1 statement) state))) 'true)
+       (else 'false)))))
+      
+;;; interpret-binary ;;;
+;; interprets a binary statement
+;; @op the operator
+(define interpret-binary
+  (lambda (op)
+    (lambda (statement state)
+      (op (interpret-value (operand1 statement) state)
+    (interpret-value (operand2 statement) (interpret-sideEffects (operand1 statement) state))))))
+
+;;; interpret-negative ;;;
+;; interprets a negative number (-1)
+;; @op the operator
+(define interpret-negative
+  (lambda (op)
+    (lambda (statement state)
+      (cond
+       ((null? (cddr statement)) (* -1 (interpret-value (operand1 statement) state)))
+       (else (op (interpret-value (operand1 statement) state)
+     (interpret-value (operand2 statement) state)))))))
+
+;; abstractions
+(define operator (lambda (expression) (car expression)))
+(define operand1 (lambda (expression) (car (cdr expression))))
+(define operand2 (lambda (expression) (car (cdr (cdr expression)))))
+(define LHS (lambda (statement) (car (cdr statement))))
+(define RHS (lambda (statement) (car (cdr (cdr statement)))))
+(define atom? (lambda (statement) (not (or (pair? statement) (null? statement)))))
+
+
+;;; member? ;;;
+;; checks whether a is in l
+;; @a the element to check in the list
+;; @l the list to check
+(define member?
+  (lambda (a l)
+    (cond
+     ((null? l) #f)
+     ((eq? (car l) a) #t)
+     (else (member? a (cdr l))))))
+
+;;; undef-return ;;;
+;; returns a user-friendly error message that return cannot be used in this context
+;; @statement the return statement
+(define undef-return
+  (lambda (statement)
+    (error "Return cannot be used in this context")))
+
+;;; undef-break ;;;
+;; returns a user-friendly error message that break cannot be used in this context
+;; @statement the break statement
+(define undef-break
+  (lambda (statement)
+    (error "Break cannot be used in this context")))
+
+;;; undef-continue ;;;
+;; returns a user-friendly error message that continue cannot be used in this context
+;; @statement the continue statement
+(define undef-continue
+  (lambda (statement)
+    (error "Continue cannot be used in this context")))
+
+;;; undef-throw ;;;
+;; returns a user-friendly error message that throw cannot be used in this context
+;; @statement the throw statement
+(define undef-throw
+  (lambda (statement)
+    (error "Exception thrown")))
+
+
+; abstraction of a new state ;
+(define newstate '(((return) (void))))
+
+;;; create-func-state ;;;
+;; creates a function state
+;; @formal-params the formal parameters for this state.
+;; @values the values
+;; @state the state
+(define create-func-state
+  (lambda (formal-params values state)
+    (letrec ((add-bindings 
+        (lambda (formal values state)
+    (cond
+     ((null? formal) state)
+     (else (add-bindings (cdr formal) (cdr values) (state-bind (car formal) (car values) state)))))))
+      (add-bindings formal-params values (state-push-frame (state-global-frame state))))))
+
+;;; state-global-frame ;;;
+;; the global-level frame of state
+;; @state the state
+(define state-global-frame
+  (lambda (state)
+    (cond
+     ((null? (cdr state)) state)
+     (state-global-frame (cdr state)))))
+
+;;; state-push-frame ;;;
+;; pushes a new frame into state
+;; @state the state
+(define state-push-frame
+  (lambda (state)
+    (cons '(() ()) state)))
+
+;;; state-pop-frame ;;;
+;; pops a frame from state
+;; @state the state
+(define state-pop-frame
+  (lambda (state)
+    (cdr state)))
+
+;;; in-frame? ;;;
+;; checks whether a variable is in the frame
+;; @variable the variable to check whether it is in the frame
+;; @frame the frame to check the variable in
+(define in-frame?
+  (lambda (variable frame)
+    (cond
+     ((null? (top-variable frame)) #f)
+     ((eq? variable (top-variable frame)) #t)
+     (else (in-frame? variable (frame-pop-top frame))))))
+
+;;; state-lookup ;;;
+;; looks up the given variable in the state
+;; @variable the variable to look up
+;; @state the state
+(define state-lookup
+  (lambda (variable state)
+    (cond
+     ((null? state) (error "Error: Variable not in state"))
+     ((in-frame? variable (top-frame state)) (state-lookup-frame variable (top-frame state)))
+     (else (state-lookup variable (state-pop-frame state))))))
+
+;;; state-lookup-frame ;;;
+;; looks up the given frame in the state
+;; @frame the frame to look up
+;; @state the state
+(define state-lookup-frame
+  (lambda (variable frame)
+    (cond
+     ((null? (top-variable frame)) (top-variable frame))
+     ((eq? (top-variable frame) variable) (top-value frame))
+     (else (state-lookup-frame variable (frame-pop-top frame))))))
+
+;;; state-bind ;;;
+;; binds to the state
+;; @variable the variable to bind
+;; @value the value of that variable
+;; @state the state
+(define state-bind
+  (lambda (variable value state)
+      (cons (cons (cons variable (car (top-frame state))) 
+                  (cons (cons value (cadr (top-frame state))) '()))
+            (state-pop-frame state))))
+
+;;; state-update ;;;
+;; updates the state
+;; @variable the variable to update the value of
+;; @value the new value
+;; @state the state
+(define state-update
+  (lambda (variable value state)
+    (letrec ((state-update-checked 
+        (lambda (variable value state)
+    (cond
+     ((in-frame? variable (top-frame state)) (state-bind variable value state))
+     (else (cons (top-frame state) (state-update-checked variable value (state-pop-frame state))))))))
+      (cond
+       ((not (state-declared? variable state)) (error "Error: Variable not declared"))
+       (else (state-update-checked variable value state))))))
+
+;;; state-declared? ;;;
+;; checks whether the variable is declared in the state
+;; @variable the variable to check whether it is declared in the state
+;; @state the state
+(define state-declared?
+  (lambda (variable state)
+    (cond
+     ((null? state) #f)
+     ((in-frame? variable (top-frame state)) #t)
+     (else (state-declared? variable (state-pop-frame state))))))
+
+;;; top-variable ;;;
+;; abstraction, refers to the top of the frame
+;; @frame the frame to check its top of
+(define top-variable
+  (lambda (frame)
+    (cond
+     ((null? (car frame)) '())
+     (else (car (car frame))))))
+
+;;; top-value ;;;
+;; abstraction, refers to the top of the frame
+;; @frame the frame to check its top of
+(define top-value
+  (lambda (frame)
+    (cond
+     ((null? (cadr frame)) '())
+     (else (caadr frame)))))
+
+;;; top-frame ;;;
+;; the topmost frame
+;; @state the state
+(define top-frame
+  (lambda (state)
+    (car state)))
+
+;;; frame-pop-top ;;;
+;; pops the topmost frame from the frame
+;; @frame the frame
+(define frame-pop-top
+  (lambda (frame)
+    (cons (cdar frame) (cons (cdadr frame) '()))))
+
+(parser "test/test11")
+(interpret "test/test14")
