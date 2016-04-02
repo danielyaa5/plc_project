@@ -130,6 +130,7 @@
      ((eq? 'return (car statement))   (return (interpret-return statement state)))
      ((eq? 'funcall (car statement))  (other-func-call (cadr statement) (cddr statement) state))
      ((eq? 'function (car statement)) (interpret-func-declare statement state))
+     ((eq? 'throw (car statement)) (throw (cdr statement)))
      (else (error "Error: Not a valueid statement")))))
 
 
@@ -282,6 +283,10 @@
       (else (interpret-catch (cdr catchBody) finally nameOfException null (interpret-statement (car catchBody) state return break continue) return break continue throw))
       )))
 
+(define another-func-call
+  (lambda (env)
+    (state-lookup 'return env)))
+
 ;;; interpret-value ;;;
 ;; interprets the value
 ;; @statement the statement that calls this value.
@@ -294,7 +299,8 @@
      ((eq? statement 'true) 'true)
      ((eq? statement 'false) 'false)
      ((atom? statement) (state-lookup statement state))
-     ((eq? 'funcall (operator statement)) (interpret-func-call (cadr statement) (cddr statement) state))
+     ((eq? 'funcall (operator statement)) (interpret-value '(another-func-call) (other-func-call (cadr statement) (cddr statement) state)))
+     ((eq? 'another-func-call (operator statement)) (another-func-call state))
      ((eq? '= (operator statement)) (interpret-value (car (cddr statement)) state))
      ((eq? '+ (operator statement)) ((interpret-binary +)         statement state))
      ((eq? '- (operator statement)) ((interpret-negative -)       statement state))
@@ -559,4 +565,4 @@
     (cons (cdar frame) (cons (cdadr frame) '()))))
 
 (parser "test/test11")
-(interpret "test/test14")
+(interpret "test/test15")
