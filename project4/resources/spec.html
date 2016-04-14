@@ -1,0 +1,205 @@
+<html>
+
+<head>
+<title>EECS 345: Interpreter Project, Part 4</title>
+</head>
+
+<body>
+<h2>EECS 345: Programming Language Concepts</h2>
+<h2>Interpreter Project, Part 4</h2>
+<h3>Due Monday, April 25</h3>
+
+<p>In this homework, you will expand on the interpreter of part 3 by adding classes and objects (instances of classes)</p>
+
+<p>An example program is as follows:
+<pre>
+class A {
+  var x = 6;
+  var y = 7;
+
+  function prod() {
+    return this.x * this.y;
+  }
+
+  function set2(a, b) {
+    x = a;
+    y = b;
+  }
+}
+
+class B extends A {
+  function set1(a) {
+    set2(a, a);
+  }
+
+  static function main () {
+    var b = new B();
+    b.set1(10);
+    return b.prod();
+  }
+}
+</pre>
+
+Your interpreter should now take two parameters, a <em>file</em> and a <em>classname</em>.  For example,
+<tt>(interpret "MyProgram.j" "B")</tt>, where <em>file</em> is the name of the file to be interpreted, and <em>classname</em>
+is the name of the class whose main method you are to run.  The function should call <tt>parser</tt> on the file
+<em>file</em>, and then lookup <tt>(string->symbol <em>classname</em>)</tt> in the environment to get the desired
+class, and then lookup the <tt>main</tt> method of this class.
+The final value returned by your interpreter should be whatever is returned by <tt>main</tt>.</p>
+
+<h4>Details</h4>
+
+<p>
+<ol><li>Note that we now allow the object type in our language.  So, objects can be assigned to variables,
+passed as parameters, and returned from functions.</li>
+<li>All mathematical and comparison operators should only be implemented for integers, and logical operators should only be implemented for booleans.</li>
+<li>You are <em>not</em> required to implement the <tt>==</tt> operator for objects, but you can if you wish.</li>
+<li>The only operator that is required to work on objects is the <tt>dot</tt> operator.</li>
+<li>The <tt>new</tt> operator will return an object of the desired class.</li>
+<li>The <tt>new</tt> operator can only be used in expressions, not as the start of a statement.</li>
+<li>Variables and methods can now be static (class) or non-static (instance).</li>
+<li>The <tt>main</tt> method should be static.</li>
+<li>The language supports use of <tt>this</tt> and <tt>super</tt> object references.</li>
+<li>The top level of the program is only class definitions.</li>
+<li>Each class definition consists of assignment statements and method definitions (just like the top level of part 3 of the interpreter).</li>
+<li>Nested uses of the <tt>dot</tt> operator are allowed.</li>
+</ol></p>
+
+<p><strong>Please Note:</strong> You should be able to create
+objects (using a generic constructor), set values, call methods, and use values <tt>this</tt> and <tt>super</tt>.
+You do <em>not</em> have to support user defined constructors.  You do <em>not</em> have to support static fields or methods (other than the main method) and you do <em>not</em> have to support abstract methods.</p>
+
+<h4>Parser Constructs</h4>
+
+<p>
+<pre>
+class A {                  =>   (class A () <em>body</em>)
+  <em>body</em>
+
+class B extends A {        =>   (class B (extends A)  <em>body</em>)
+  <em>body</em>
+
+static var x = 5;          =>   (static-var x 5)
+var y = true;              =>   (var y true)
+
+static function main() {   =>   (static-function main () <em>body</em>)
+  <em>body</em>
+
+function f() {             =>   (function f () <em>body</em>)
+  <em>body</em>
+
+function g();              =>   (abstract-function g ())
+
+
+new A()                    =>   (new A)
+
+a.x                        =>   (dot a x)
+
+new A().f(3,5)             =>   (funcall (dot (new A) f) 3 5)
+</pre>
+</p>
+
+<h4>Tasks</h4>
+
+<p>Here is a suggested order to attack the project.</p>
+<ol>
+<p><strong><em>First, get the basic class structure into your interpreter.</em></strong></p>
+<li>Create helper functions to create a new class and instance and to access the portions of a class and instance.  The class must store the parent class, the list of instance fields, the list of methods/closures, and (optionally) a list of class fields/values and a list of constructors.
+Use your state/environment structure for each of these lists.  The instance must store the instance's class (i.e. the run-time type or the true type) and a list of instance field values.</li>
+<li>Change the top level interpreter code that you used in part 3 to return a class instead of returning a state.</li>
+<li>Create a new global level for the interpreter that reads
+a list of class definitions, and stores each class with its definition in the state.</li>
+<li>Create a new <tt>interpret</tt> function that looks up the main method in the appropriate class and calls it.  See if you can interpret an example like:
+<pre>
+class A {
+  static function main() {
+    return 5;
+  }
+}
+</pre>
+or like this
+<pre>
+class B {
+  static function main() {
+    var b = new B();
+    return b;
+  }
+}
+</pre>
+</li>
+<p><strong><em>Next, get the dot operator working.</em></strong></p>
+<li>All M_state and M_value functions will need
+to pass a parameter for the class-type (i.e. the compile-time type or current type) and (optionally) the instance (to avoid having to continuously look up "this" in the state).</li>
+<li>Create a pair of functions (or a single function that returns a pair) that takes the left hand side of a dot expression and returns the class-type (i.e. the compile-time type or current type or class) and the instance of the left hand side of the dot.</li>
+<li>Add a fourth value to the function closure: a function that looks up the function's class in the environment/state.</li>
+<li>Update the code that evaluates a function call to deal with objects and classes. (Follow the denotational semantics sketched in lecture.)</li>
+<li>Add code to the function lookup to handle the dot operator. See if you can interpret an example like:
+<pre>
+class A {
+  function f() {
+    return 5;
+  }
+
+  static function main() {
+    var a = new A();
+    return a.f();
+  }
+}
+</pre>
+</li>
+<li>Create helper functions that successfully declare, lookup, and update non-static fields.  The functions will need to deal with the fact the the field names part of the state structure is in the class and the field values part of the state structure is in the instance.</li>
+<li>Add code to the places where you do variable lookups so that it can handle the dot operator.</li>
+<li>Change your code for a variable to first lookup the variable in the local environment and if that fails to look in the non-static fields.</li>
+<li>Update the code that interprets an assignment statement so that it looks for the variables with dots in the instance fields and for variables without dots it first looks in the local environment and  then in the instance fields.</li>
+<li>Now test on the first 6 sample programs.</li>
+<p><strong><em>Finally, get polymorphism working.</em></strong></p>
+<li>If your state consists of separate lists for the names and their values, change the state so that the values are now stored in reverse order, and you use the "index" of the variable name to look up the value. </li>
+<li>Make sure the functions that create the new classes and instances correctly append their lists onto the lists from the parent class.</li>
+</ol></p>
+
+<h4>Other language features</h4>
+
+<p>Everything we did previously in the interpreter is still allowed: functions inside funtions, call-by-reference (if you chose to implement it).  A function that is inside a static function
+will not have the <tt>static</tt> modifier, but it will be static simply by the nature of the containing function.</p> 
+
+<h4>For Some Additional Challenge:</h4>
+
+<p><strong>Add static (class) methods and fields. </strong>  For static methods, the only change is that the method will not get the "extra" parameter <em>this</em>.  For static fields, you will need to change the places that do field lookup and assign so that 
+the method looks in three different environments: the local environment, the class fields, and the instance fields.</p> 
+
+<p><strong>Add abstract methods</strong>.  The interpreter will only support non-static abstract methods.  The change you must make is to give an abstract method an appropriate value in the body portion of the closure to indicate that the body does not exist.
+When an instance is created, you should verify that any abstract methods have been overridden.  If any have not, give an appropraite error.</p>
+
+<p><strong>Add user-defined constructors.</strong>  In the language, the constructor will look
+like a method that has the same name as the class name, but is not preceded with<tt>function</tt>, and in the parse tree it will be identified by <tt>constructor</tt>.
+<pre>
+class A {
+  A(x) {               =>  (constructor (x) <em>body</em>)
+    <em>body</em>
+  }
+}
+</pre>
+Constructors can be overloading, and constructors/new needs to have the following behavior:
+<ol>
+<li>Create the instance including space for all instance fields.</li>
+<li>Lookup the appropriate constructor (if one exists).  If no constructor exists, allow for a default constructor.</li>
+<li>Call the constructor specified by the <tt>super</tt> or <tt>this</tt> constructor call that should be the first 
+line of the constructor body (or automatically call the parent class constructor with no parameters if no <tt>super()</tt> is 
+present).</li>
+<li>Evaluate the initial value expressions for the fields of this class, in the order they are in the code.</li>
+<li>Evaluate the rest of the constructor body.</li>
+</ol>
+As a hint, make the constructor list be a separate environment
+of the class from the method environment.  That way constructors will not be inherited.</p>
+
+</body>
+
+</html>
+
+
+
+
+
+</body>
+
+</html>
