@@ -3,8 +3,9 @@
 ;;; Due Mar 30, 2016 @ Midnight
 
 ; Load the parser
-; (load "simpleParser.scm") obsolete
-(load "functionParser.scm")
+; (load "simpleParser.scm")   ; obsolete
+; (load "functionParser.scm") ; obsolete
+(load "classParser.scm")
 
 ; (define call/cc call-with-current-continuation)
 
